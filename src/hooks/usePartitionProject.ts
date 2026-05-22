@@ -120,6 +120,7 @@ export interface PartitionProjectActions {
   confirmDeleteRow: () => void;
   dismissToast: (id: string) => void;
   copyPartitionInfo: () => Promise<void>;
+  copyPartitionCsv: () => Promise<void>;
 }
 
 function usePartitionProject(): PartitionProjectState & PartitionProjectActions {
@@ -232,23 +233,31 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     );
   }
 
-  async function copyPartitionInfo(): Promise<void> {
+  // Shared copy path: the Tauri clipboard plugin first (Rust backend, no
+  // WebView permission prompt), then a legacy fallback for the dev server.
+  async function copyToClipboard(text: string, successMessage: string): Promise<void> {
     try {
-      // Route through the Tauri clipboard plugin (Rust backend) — no WebView
-      // permission prompt, consistent with the editable-field context menu.
-      await writeText(partitionInfoText);
-      pushToast("Partition information copied to clipboard.", "success");
+      await writeText(text);
+      pushToast(successMessage, "success");
       return;
     } catch {
       // Fall through to the legacy copy path (e.g. browser-only dev server).
     }
 
-    if (fallbackCopyText(partitionInfoText)) {
-      pushToast("Partition information copied to clipboard.", "success");
+    if (fallbackCopyText(text)) {
+      pushToast(successMessage, "success");
       return;
     }
 
-    pushToast("Clipboard is unavailable. Copy manually from the Partition Information card.", "warning");
+    pushToast("Clipboard is unavailable. Select the text and copy it manually.", "warning");
+  }
+
+  async function copyPartitionInfo(): Promise<void> {
+    await copyToClipboard(partitionInfoText, "sdkconfig entries copied to clipboard.");
+  }
+
+  async function copyPartitionCsv(): Promise<void> {
+    await copyToClipboard(partitionCsvText, "Partition CSV copied to clipboard.");
   }
 
   function hydrateProjectState(response: LoadProjectResponse): void {
@@ -498,6 +507,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     confirmDeleteRow,
     dismissToast,
     copyPartitionInfo,
+    copyPartitionCsv,
   };
 }
 

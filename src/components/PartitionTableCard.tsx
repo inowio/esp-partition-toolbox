@@ -284,7 +284,7 @@ export default function PartitionTableCard({
         <button
           type="button"
           onClick={onAddRow}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500"
         >
           <FiPlus /> Add Partition
         </button>

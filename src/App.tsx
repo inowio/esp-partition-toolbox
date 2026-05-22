@@ -7,6 +7,7 @@ import EditableContextMenu from "./components/EditableContextMenu";
 import CloseProjectModal from "./components/CloseProjectModal";
 import DeletePartitionModal from "./components/DeletePartitionModal";
 import ErrorCard from "./components/ErrorCard";
+import HelpModal from "./components/HelpModal";
 import KpiCards from "./components/KpiCards";
 import PartitionInformationCard from "./components/PartitionInformationCard";
 import PartitionPreviewCard from "./components/PartitionPreviewCard";
@@ -24,6 +25,7 @@ const FLASH_OPTIONS_MB = [2, 4, 8, 16, 32, 64, 128, 256, 512];
 function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [updatePrompt, setUpdatePrompt] = useState<UpdatePrompt | null>(null);
 
   const {
@@ -61,6 +63,7 @@ function App() {
     confirmDeleteRow,
     dismissToast,
     copyPartitionInfo,
+    copyPartitionCsv,
   } = usePartitionProject();
 
   useEffect(() => {
@@ -121,6 +124,7 @@ function App() {
         appVersion={appVersion}
         onToggleTheme={toggleTheme}
         onShowAbout={() => setIsAboutOpen(true)}
+        onShowHelp={() => setIsHelpOpen(true)}
       />
 
       <main className="flex w-full flex-col gap-5 px-4 py-5 md:px-8 md:py-7">
@@ -169,7 +173,11 @@ function App() {
         />
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <PartitionPreviewCard csv={partitionCsvText} />
+          <PartitionPreviewCard
+            csv={partitionCsvText}
+            onCopy={copyPartitionCsv}
+            isBusy={isBusy}
+          />
 
           <PartitionInformationCard
             partitionInfo={partitionInfoText}
@@ -206,6 +214,8 @@ function App() {
           setUpdatePrompt(prompt);
         }}
       />
+
+      <HelpModal open={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
 
       {updatePrompt ? (
         <UpdateDialog

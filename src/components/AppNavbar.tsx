@@ -1,10 +1,11 @@
-import { FiInfo, FiMoon, FiSun } from "react-icons/fi";
+import { FiHelpCircle, FiInfo, FiMoon, FiSun } from "react-icons/fi";
 
 interface AppNavbarProps {
   isDarkTheme: boolean;
   appVersion: string;
   onToggleTheme: () => void;
   onShowAbout: () => void;
+  onShowHelp: () => void;
 }
 
 export default function AppNavbar({
@@ -12,6 +13,7 @@ export default function AppNavbar({
   appVersion,
   onToggleTheme,
   onShowAbout,
+  onShowHelp,
 }: AppNavbarProps) {
   return (
     <nav className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur md:px-8 dark:border-slate-800 dark:bg-slate-900/85">
@@ -25,6 +27,16 @@ export default function AppNavbar({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onShowHelp}
+            aria-label="How to use this tool"
+            title="Help"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <FiHelpCircle />
+          </button>
+
           <button
             type="button"
             onClick={onShowAbout}

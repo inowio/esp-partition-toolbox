@@ -7,7 +7,13 @@ const noop = () => undefined;
 describe("AppNavbar", () => {
   it("renders the app title and version", () => {
     render(
-      <AppNavbar isDarkTheme appVersion="1.2.3" onToggleTheme={noop} onShowAbout={noop} />,
+      <AppNavbar
+        isDarkTheme
+        appVersion="1.2.3"
+        onToggleTheme={noop}
+        onShowAbout={noop}
+        onShowHelp={noop}
+      />,
     );
 
     expect(screen.getByText("ESP Partition Toolbox")).toBeInTheDocument();
@@ -16,7 +22,13 @@ describe("AppNavbar", () => {
 
   it("shows 'Light' label when the dark theme is active", () => {
     render(
-      <AppNavbar isDarkTheme appVersion="0.1.0" onToggleTheme={noop} onShowAbout={noop} />,
+      <AppNavbar
+        isDarkTheme
+        appVersion="0.1.0"
+        onToggleTheme={noop}
+        onShowAbout={noop}
+        onShowHelp={noop}
+      />,
     );
     expect(screen.getByRole("button", { name: "Light" })).toBeInTheDocument();
   });
@@ -28,6 +40,7 @@ describe("AppNavbar", () => {
         appVersion="0.1.0"
         onToggleTheme={noop}
         onShowAbout={noop}
+        onShowHelp={noop}
       />,
     );
     expect(screen.getByRole("button", { name: "Dark" })).toBeInTheDocument();
@@ -41,6 +54,7 @@ describe("AppNavbar", () => {
         appVersion="0.1.0"
         onToggleTheme={onToggleTheme}
         onShowAbout={noop}
+        onShowHelp={noop}
       />,
     );
 
@@ -56,10 +70,27 @@ describe("AppNavbar", () => {
         appVersion="0.1.0"
         onToggleTheme={noop}
         onShowAbout={onShowAbout}
+        onShowHelp={noop}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "About ESP Partition Toolbox" }));
     expect(onShowAbout).toHaveBeenCalledTimes(1);
+  });
+
+  it("invokes onShowHelp when the Help button is clicked", () => {
+    const onShowHelp = vi.fn();
+    render(
+      <AppNavbar
+        isDarkTheme
+        appVersion="0.1.0"
+        onToggleTheme={noop}
+        onShowAbout={noop}
+        onShowHelp={onShowHelp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "How to use this tool" }));
+    expect(onShowHelp).toHaveBeenCalledTimes(1);
   });
 });

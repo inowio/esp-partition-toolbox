@@ -317,6 +317,17 @@ describe("usePartitionProject", () => {
     expect(result.current.toasts.some((toast) => toast.kind === "success")).toBe(true);
   });
 
+  it("copies the partition CSV through the Tauri clipboard plugin", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+
+    await act(async () => {
+      await result.current.copyPartitionCsv();
+    });
+
+    expect(writeTextMock).toHaveBeenCalledWith(result.current.partitionCsvText);
+    expect(result.current.toasts.some((toast) => toast.kind === "success")).toBe(true);
+  });
+
   it("builds a partition info block from the filename and offset", () => {
     const { result } = renderHook(() => usePartitionProject());
 
