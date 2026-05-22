@@ -15,7 +15,7 @@ export default function AppNavbar({
     <nav className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur md:px-8 dark:border-slate-800 dark:bg-slate-900/85">
       <div className="flex w-full items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <img src="/tauri.svg" className="h-8 w-8" alt="ESP Partition Toolbox logo" />
+          <img src="/logo.svg" className="h-8 w-8" alt="ESP Partition Toolbox logo" />
           <div>
             <h1 className="text-lg font-semibold tracking-tight">ESP Partition Toolbox</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Version {appVersion}</p>
