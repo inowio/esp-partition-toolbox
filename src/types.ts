@@ -19,7 +19,10 @@ export interface PartitionDraftRow {
   type: string;
   subtype: string;
   size: string;
+  /** Pinned start offset (hex string). Empty = auto-packed after the previous partition. */
+  pinnedOffset: string;
   encrypted: boolean;
+  readonly: boolean;
 }
 
 export interface PartitionLayoutRow extends PartitionDraftRow {

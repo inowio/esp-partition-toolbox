@@ -10,7 +10,9 @@ function makeLayoutRow(overrides: Partial<PartitionLayoutRow>): PartitionLayoutR
     type: "data",
     subtype: "nvs",
     size: "64K",
+    pinnedOffset: "",
     encrypted: false,
+    readonly: false,
     offset: 0x10000,
     end: 0x20000,
     sizeBytes: 0x10000,
@@ -91,17 +93,32 @@ describe("PartitionTableCard", () => {
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { type: "app", subtype: "factory" });
   });
 
-  it("toggles the encrypted flag when the flags button is clicked", () => {
+  it("toggles the encrypted flag when the Encrypted button is clicked", () => {
     const onUpdateRow = vi.fn();
     renderCard([makeLayoutRow({ id: "r1", encrypted: false })], { onUpdateRow });
 
-    fireEvent.click(screen.getByRole("button", { name: /Off/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Encrypted" }));
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { encrypted: true });
   });
 
-  it("shows 'Encrypted' for an encrypted row", () => {
-    renderCard([makeLayoutRow({ encrypted: true })]);
-    expect(screen.getByRole("button", { name: /Encrypted/ })).toBeInTheDocument();
+  it("toggles the read-only flag for a data partition", () => {
+    const onUpdateRow = vi.fn();
+    renderCard([makeLayoutRow({ id: "r1", type: "data", subtype: "nvs", readonly: false })], {
+      onUpdateRow,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Read-only" }));
+    expect(onUpdateRow).toHaveBeenCalledWith("r1", { readonly: true });
+  });
+
+  it("disables the read-only toggle on an app partition", () => {
+    renderCard([makeLayoutRow({ id: "r1", type: "app", subtype: "factory" })]);
+    expect(screen.getByRole("button", { name: "Read-only" })).toBeDisabled();
+  });
+
+  it("disables the read-only toggle on the ota data subtype", () => {
+    renderCard([makeLayoutRow({ id: "r1", type: "data", subtype: "ota" })]);
+    expect(screen.getByRole("button", { name: "Read-only" })).toBeDisabled();
   });
 
   it("invokes onRequestDelete with the row when its delete button is clicked", () => {
@@ -223,5 +240,38 @@ describe("PartitionTableCard", () => {
     const slider = screen.getByRole("slider") as HTMLInputElement;
     expect(slider.value).toBe("500");
     expect(slider).toBeDisabled();
+  });
+
+  it("shows the offset as static text in easy mode", () => {
+    renderCard([makeLayoutRow({ id: "r1", offset: 0x10000, sizeBytes: 0x4000 })]);
+    expect(screen.getByText("0x10000")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("0x10000")).toBeNull();
+  });
+
+  it("makes the offset an editable input pre-filled with the computed value in advanced mode", () => {
+    renderCard([makeLayoutRow({ id: "r1", offset: 0x10000, sizeBytes: 0x4000 })]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Advanced" }));
+    expect(screen.getByDisplayValue("0x10000")).toBeInTheDocument();
+  });
+
+  it("pins the offset when the anchor button is clicked", () => {
+    const onUpdateRow = vi.fn();
+    renderCard([makeLayoutRow({ id: "r1", offset: 0x10000, sizeBytes: 0x4000 })], { onUpdateRow });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pin this offset" }));
+    expect(onUpdateRow).toHaveBeenCalledWith("r1", { pinnedOffset: "0x10000" });
+  });
+
+  it("offers a Custom type option only in advanced mode", () => {
+    renderCard([makeLayoutRow({ id: "r1", type: "data" })]);
+    expect(screen.queryByRole("option", { name: "Custom…" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Advanced" }));
+    expect(screen.getAllByRole("option", { name: "Custom…" }).length).toBeGreaterThan(0);
+  });
+
+  it("renders a custom numeric type/subtype as editable inputs", () => {
+    renderCard([makeLayoutRow({ id: "r1", type: "0x40", subtype: "0x00" })]);
+    expect(screen.getByDisplayValue("0x40")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0x00")).toBeInTheDocument();
   });
 });

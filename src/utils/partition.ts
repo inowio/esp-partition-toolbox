@@ -71,6 +71,14 @@ function normalizeTypeValue(value: string, fallback: string): string {
   return normalized || fallback;
 }
 
+// ESP-IDF partition flags are colon-joined in the CSV's last column.
+function composeFlags(encrypted: boolean, readonly: boolean): string {
+  const flags: string[] = [];
+  if (encrypted) flags.push("encrypted");
+  if (readonly) flags.push("readonly");
+  return flags.join(":");
+}
+
 export function normalizeSizeInput(value: string): string {
   const cleanedValue = value.trim().toUpperCase();
 
@@ -204,7 +212,9 @@ export function defaultRowsForFlashSize(flashSizeMb: number): PartitionDraftRow[
       type: "data",
       subtype: "nvs",
       size: formatSizeToPartitionUnit(nvsSize),
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
     },
     {
       id: createRowId(),
@@ -212,7 +222,9 @@ export function defaultRowsForFlashSize(flashSizeMb: number): PartitionDraftRow[
       type: "data",
       subtype: "phy",
       size: formatSizeToPartitionUnit(phySize),
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
     },
     {
       id: createRowId(),
@@ -220,7 +232,9 @@ export function defaultRowsForFlashSize(flashSizeMb: number): PartitionDraftRow[
       type: "app",
       subtype: "factory",
       size: formatSizeToPartitionUnit(appSize),
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
     },
   ];
 }
@@ -270,7 +284,10 @@ export function parsePartitionCsv(content: string, fallbackFlashSizeMb = 8): {
       type: normalizeTypeValue(cells[1] || "data", "data"),
       subtype: normalizeTypeValue(cells[2] || "nvs", "nvs"),
       size: normalizedSize || "64K",
+      // Offsets are re-packed on load; the user pins them manually in advanced mode.
+      pinnedOffset: "",
       encrypted: /encrypted/i.test(flags),
+      readonly: /readonly/i.test(flags),
     });
   }
 
@@ -323,7 +340,27 @@ export function calculateLayout(
   for (const row of rows) {
     const rowType = normalizeTypeValue(row.type, "data");
     const alignment = rowType === "app" ? APP_ALIGNMENT : SECTOR_SIZE;
-    const offset = alignUp(cursor, alignment);
+
+    // A pinned offset is used verbatim; otherwise the partition auto-packs
+    // after the previous one. Pinned offsets are checked for overlap/alignment.
+    const pinned = parseNumericValue(row.pinnedOffset ?? "");
+    const isPinned = pinned != null && pinned >= 0;
+    const offset = isPinned ? pinned : alignUp(cursor, alignment);
+
+    if (isPinned && offset < cursor) {
+      errors.push({
+        message: `Partition ${row.name || "<unnamed>"} offset ${formatHex(offset)} overlaps earlier content — it must start at or after ${formatHex(cursor)}.`,
+        severity: "blocking",
+      });
+    }
+
+    if (isPinned && rowType !== "app" && offset % SECTOR_SIZE !== 0) {
+      errors.push({
+        message: `Partition ${row.name || "<unnamed>"} offset ${formatHex(offset)} is not 4KB aligned.`,
+        severity: "blocking",
+      });
+    }
+
     const parsedSize = parseSizeToBytes(row.size);
 
     if (!parsedSize || parsedSize <= 0) {
@@ -337,7 +374,7 @@ export function calculateLayout(
         offset,
         end: offset,
         sizeBytes: 0,
-        flags: row.encrypted ? "encrypted" : "",
+        flags: composeFlags(row.encrypted, row.readonly),
       });
 
       continue;
@@ -372,7 +409,7 @@ export function calculateLayout(
       offset,
       end,
       sizeBytes: normalizedSize,
-      flags: row.encrypted ? "encrypted" : "",
+      flags: composeFlags(row.encrypted, row.readonly),
     });
 
     cursor = end;
@@ -445,6 +482,32 @@ function validatePartitionRules(rows: PartitionLayoutRow[], errors: ValidationEr
         message: `NVS partition "${name}" is ${formatHex(row.sizeBytes)} — minimum recommended is 12KB (${formatHex(NVS_MINIMUM_BYTES)}).`,
         severity: "warning",
       });
+    }
+
+    // Read-only flag: data partitions only, never ota/coredump subtypes (ESP-IDF 5.2+).
+    if (row.readonly) {
+      if (type === "app") {
+        errors.push({
+          message: `Read-only flag is not allowed on app partition "${name}".`,
+          severity: "blocking",
+        });
+      } else if (subtype === "ota" || subtype === "coredump") {
+        errors.push({
+          message: `Read-only flag is not allowed on the "${subtype}" subtype ("${name}").`,
+          severity: "blocking",
+        });
+      }
+    }
+
+    // Custom (numeric) partition types must use the 0x40-0xFE user range.
+    if (type !== "app" && type !== "data") {
+      const numericType = parseNumericValue(type);
+      if (numericType == null || numericType < 0x40 || numericType > 0xfe) {
+        errors.push({
+          message: `Custom type "${row.type}" for "${name}" must be a number in 0x40–0xFE.`,
+          severity: "blocking",
+        });
+      }
     }
   }
 
@@ -550,6 +613,8 @@ export function createEmptyRow(): PartitionDraftRow {
     type: "data",
     subtype: "spiffs",
     size: "64K",
+    pinnedOffset: "",
     encrypted: false,
+    readonly: false,
   };
 }

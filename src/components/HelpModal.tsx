@@ -106,7 +106,11 @@ const CONCEPTS: { title: string; body: string }[] = [
   },
   {
     title: "Offset & alignment",
-    body: "Offset is the flash address where a partition starts. app partitions must begin on a 64 KB (0x10000) boundary; data partitions on a 4 KB (0x1000) boundary. The toolbox aligns offsets for you, which can leave small unavoidable gaps.",
+    body: "Offset is the flash address where a partition starts. app partitions must begin on a 64 KB (0x10000) boundary; data partitions on a 4 KB (0x1000) boundary. The toolbox auto-packs offsets for you, which can leave small unavoidable gaps.",
+  },
+  {
+    title: "Advanced mode",
+    body: "The Advanced toggle above the partition table unlocks editable offsets — pin a partition to a fixed flash address while the rest keep auto-packing — and custom numeric partition types. Leave it off for everyday work.",
   },
   {
     title: "Sizes & units",
@@ -183,7 +187,9 @@ function PartitionTypesTab() {
       <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
         Every partition has a <strong>Type</strong> and a <strong>Subtype</strong>. The type
         is either <Code>app</Code> (runnable firmware) or <Code>data</Code> (everything
-        else). The subtype narrows the exact role.
+        else). The subtype narrows the exact role. Advanced mode also accepts custom
+        numeric types (<Code>0x40</Code>–<Code>0xFE</Code>) and subtypes for
+        application-defined partitions.
       </p>
 
       <div>
@@ -216,9 +222,8 @@ function EncryptionTab() {
   return (
     <div className="space-y-4 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
       <p>
-        The <strong>Flags</strong> column has one toggle: <strong>Encrypted</strong>. It
-        marks a partition to be encrypted <em>when flash encryption is enabled on the
-        chip</em>.
+        The <strong>Flags</strong> column has two optional toggles —{" "}
+        <strong>Encrypted</strong> and <strong>Read-only</strong> — both off by default.
       </p>
 
       <div>
@@ -273,6 +278,31 @@ function EncryptionTab() {
         burning eFuses on the chip — that is largely a one-way, irreversible operation.
         Read the ESP-IDF “Flash Encryption” guide before enabling it on a production
         device.
+      </div>
+
+      <div>
+        <SubHeading>The Read-only flag</SubHeading>
+        <p className="mt-1">
+          The <strong>Read-only</strong> toggle marks a <Code>data</Code> partition as
+          read-only, so the firmware treats its contents as immutable.
+        </p>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          <li>
+            It applies to <Code>data</Code> partitions only — never <Code>app</Code>{" "}
+            partitions, and not the <Code>ota</Code> or <Code>coredump</Code> subtypes.
+            The toggle is disabled wherever the flag is not allowed.
+          </li>
+          <li>
+            Use it for partitions shipped with fixed content — a bundled filesystem of
+            web assets, certificates, or factory data the device must never overwrite.
+          </li>
+        </ul>
+      </div>
+
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <span className="font-semibold">Version note:</span> the read-only flag was added
+        in ESP-IDF 5.2. Older ESP-IDF versions reject it and the build fails — only enable
+        it when your project targets ESP-IDF 5.2 or newer.
       </div>
     </div>
   );

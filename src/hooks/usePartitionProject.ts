@@ -190,7 +190,9 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
         || row.type !== snapshotRow.type
         || row.subtype !== snapshotRow.subtype
         || row.size !== snapshotRow.size
+        || row.pinnedOffset !== snapshotRow.pinnedOffset
         || row.encrypted !== snapshotRow.encrypted
+        || row.readonly !== snapshotRow.readonly
       ) {
         return true;
       }

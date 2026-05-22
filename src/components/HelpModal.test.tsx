@@ -22,16 +22,18 @@ describe("HelpModal", () => {
     expect(screen.getByText("Data partitions (type: data)")).toBeInTheDocument();
   });
 
-  it("switches to the Flags & Encryption tab", () => {
+  it("switches to the Flags & Encryption tab and covers both flags", () => {
     render(<HelpModal open onClose={() => undefined} />);
     fireEvent.click(screen.getByRole("tab", { name: "Flags & Encryption" }));
     expect(screen.getByText("What flash encryption is")).toBeInTheDocument();
+    expect(screen.getByText("The Read-only flag")).toBeInTheDocument();
   });
 
-  it("switches to the Key Concepts tab", () => {
+  it("switches to the Key Concepts tab and documents Advanced mode", () => {
     render(<HelpModal open onClose={() => undefined} />);
     fireEvent.click(screen.getByRole("tab", { name: "Key Concepts" }));
     expect(screen.getByText("Offset & alignment")).toBeInTheDocument();
+    expect(screen.getByText("Advanced mode")).toBeInTheDocument();
   });
 
   it("invokes onClose when the close button is clicked", () => {

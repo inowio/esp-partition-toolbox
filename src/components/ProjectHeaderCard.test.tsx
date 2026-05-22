@@ -16,7 +16,6 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     partitionOffset: "0x8000",
     statusMessage: "Select an ESP-IDF project folder to begin.",
     isBusy: false,
-    hasSnapshot: false,
     onFlashSizeChange: () => undefined,
     onSdkconfigFileChange: () => undefined,
     onSyncSdkconfigChange: () => undefined,
@@ -89,12 +88,14 @@ describe("ProjectHeaderCard", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  it("disables Reset until a snapshot exists", () => {
-    const { rerender } = render(<ProjectHeaderCard {...baseProps({ hasSnapshot: false })} />);
-    expect(screen.getByRole("button", { name: /Reset/ })).toBeDisabled();
-
-    rerender(<ProjectHeaderCard {...baseProps({ hasSnapshot: true })} />);
+  it("keeps Reset enabled even with no project loaded", () => {
+    render(<ProjectHeaderCard {...baseProps()} />);
     expect(screen.getByRole("button", { name: /Reset/ })).toBeEnabled();
+  });
+
+  it("disables Reset while busy", () => {
+    render(<ProjectHeaderCard {...baseProps({ isBusy: true })} />);
+    expect(screen.getByRole("button", { name: /Reset/ })).toBeDisabled();
   });
 
   it("hides the sdkconfig sync controls until a project is loaded", () => {

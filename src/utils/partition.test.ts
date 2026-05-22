@@ -503,7 +503,9 @@ describe("calculateLayout", () => {
       type: "data",
       subtype: "nvs",
       size,
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
     }));
   }
 
@@ -618,8 +620,8 @@ describe("calculateLayout", () => {
 
   it("propagates encrypted flag to layout row flags", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "secure", type: "data", subtype: "nvs", size: "64K", encrypted: true },
-      { id: "r2", name: "plain", type: "data", subtype: "nvs", size: "64K", encrypted: false },
+      { id: "r1", name: "secure", type: "data", subtype: "nvs", size: "64K", encrypted: true, pinnedOffset: "", readonly: false },
+      { id: "r2", name: "plain", type: "data", subtype: "nvs", size: "64K", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     expect(layout.rows[0].flags).toBe("encrypted");
@@ -628,8 +630,8 @@ describe("calculateLayout", () => {
 
   it("normalizes type and subtype to lowercase in layout rows", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "p1", type: "DATA", subtype: "NVS", size: "64K", encrypted: false },
-      { id: "r2", name: "p2", type: "App", subtype: "Factory", size: "1M", encrypted: false },
+      { id: "r1", name: "p1", type: "DATA", subtype: "NVS", size: "64K", encrypted: false, pinnedOffset: "", readonly: false },
+      { id: "r2", name: "p2", type: "App", subtype: "Factory", size: "1M", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     expect(layout.rows[0].type).toBe("data");
@@ -640,8 +642,8 @@ describe("calculateLayout", () => {
 
   it("aligns data partitions to 4KB and app partitions to 64KB", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "nvs", type: "data", subtype: "nvs", size: "5K", encrypted: false },
-      { id: "r2", name: "factory", type: "app", subtype: "factory", size: "1M", encrypted: false },
+      { id: "r1", name: "nvs", type: "data", subtype: "nvs", size: "5K", encrypted: false, pinnedOffset: "", readonly: false },
+      { id: "r2", name: "factory", type: "app", subtype: "factory", size: "1M", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
 
@@ -684,7 +686,7 @@ describe("calculateLayout", () => {
 
   it("normalizes size string in layout output", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "p1", type: "data", subtype: "nvs", size: "  64k  ", encrypted: false },
+      { id: "r1", name: "p1", type: "data", subtype: "nvs", size: "  64k  ", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     expect(layout.rows[0].size).toBe("64K");
@@ -692,7 +694,7 @@ describe("calculateLayout", () => {
 
   it("uses fallback type/subtype for empty strings", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "p1", type: "", subtype: "", size: "64K", encrypted: false },
+      { id: "r1", name: "p1", type: "", subtype: "", size: "64K", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     expect(layout.rows[0].type).toBe("data");
@@ -714,7 +716,9 @@ describe("calculateLayout — ESP-IDF partition rules", () => {
       type: "data",
       subtype: "nvs",
       size: "64K",
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
       ...overrides,
     };
   }
@@ -902,7 +906,7 @@ describe("serializePartitionCsv", () => {
 
   it("includes encrypted flag in output", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "secure", type: "data", subtype: "nvs", size: "64K", encrypted: true },
+      { id: "r1", name: "secure", type: "data", subtype: "nvs", size: "64K", encrypted: true, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     const csv = serializePartitionCsv("", layout.rows);
@@ -928,7 +932,7 @@ describe("serializePartitionCsv", () => {
 
   it("outputs empty string for no-flag rows", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "p1", type: "data", subtype: "nvs", size: "64K", encrypted: false },
+      { id: "r1", name: "p1", type: "data", subtype: "nvs", size: "64K", encrypted: false, pinnedOffset: "", readonly: false },
     ];
     const layout = calculateLayout(rows, 8);
     const csv = serializePartitionCsv("", layout.rows);
@@ -1009,8 +1013,8 @@ describe("round-trip: parse → layout → serialize → parse", () => {
 
   it("preserves encrypted flag through round-trip", () => {
     const rows: PartitionDraftRow[] = [
-      { id: "r1", name: "secure_nvs", type: "data", subtype: "nvs", size: "64K", encrypted: true },
-      { id: "r2", name: "plain_data", type: "data", subtype: "spiffs", size: "512K", encrypted: false },
+      { id: "r1", name: "secure_nvs", type: "data", subtype: "nvs", size: "64K", encrypted: true, pinnedOffset: "", readonly: false },
+      { id: "r2", name: "plain_data", type: "data", subtype: "spiffs", size: "512K", encrypted: false, pinnedOffset: "", readonly: false },
     ];
 
     const layout = calculateLayout(rows, 8);
@@ -1043,7 +1047,9 @@ describe("maxSizeBytesForRow", () => {
       type: "data",
       subtype: "nvs",
       size: "16K",
+      pinnedOffset: "",
       encrypted: false,
+      readonly: false,
       offset: 0x10000,
       end: 0x14000,
       sizeBytes: 0x4000,
@@ -1088,5 +1094,135 @@ describe("maxSizeBytesForRow", () => {
       layoutRow({ type: "app", offset: 0x20000, sizeBytes: 0x1000000 }),
     ];
     expect(maxSizeBytesForRow(rows, 0, 0x200000)).toBe(0x1000);
+  });
+});
+
+function draftRow(overrides: Partial<PartitionDraftRow>): PartitionDraftRow {
+  return {
+    id: `row-${Math.random().toString(36).slice(2, 8)}`,
+    name: "part",
+    type: "data",
+    subtype: "nvs",
+    size: "64K",
+    pinnedOffset: "",
+    encrypted: false,
+    readonly: false,
+    ...overrides,
+  };
+}
+
+describe("readonly flag", () => {
+  it("parses the readonly flag from the CSV", () => {
+    const result = parsePartitionCsv("ro, data, spiffs, 0x10000, 64K, encrypted:readonly\n");
+    expect(result.rows[0].readonly).toBe(true);
+    expect(result.rows[0].encrypted).toBe(true);
+  });
+
+  it("serializes encrypted and readonly as colon-joined flags", () => {
+    const layout = calculateLayout(
+      [draftRow({ name: "ro", subtype: "spiffs", encrypted: true, readonly: true })],
+      8,
+    );
+    expect(layout.rows[0].flags).toBe("encrypted:readonly");
+  });
+
+  it("serializes the readonly flag on its own", () => {
+    const layout = calculateLayout([draftRow({ name: "ro", subtype: "spiffs", readonly: true })], 8);
+    expect(layout.rows[0].flags).toBe("readonly");
+  });
+
+  it("rejects the readonly flag on an app partition", () => {
+    const layout = calculateLayout(
+      [draftRow({ name: "app1", type: "app", subtype: "factory", size: "1M", readonly: true })],
+      8,
+    );
+    expect(
+      layout.errors.some((e) => e.message.includes("not allowed on app partition")),
+    ).toBe(true);
+  });
+
+  it("rejects the readonly flag on the ota and coredump subtypes", () => {
+    const otaLayout = calculateLayout(
+      [draftRow({ name: "otadata", subtype: "ota", size: "8K", readonly: true })],
+      8,
+    );
+    expect(otaLayout.errors.some((e) => e.message.includes("not allowed on the"))).toBe(true);
+
+    const coredumpLayout = calculateLayout(
+      [draftRow({ name: "cd", subtype: "coredump", readonly: true })],
+      8,
+    );
+    expect(coredumpLayout.errors.some((e) => e.message.includes("not allowed on the"))).toBe(true);
+  });
+
+  it("allows the readonly flag on a regular data partition", () => {
+    const layout = calculateLayout(
+      [draftRow({ name: "ro", subtype: "spiffs", readonly: true })],
+      8,
+    );
+    expect(layout.errors.some((e) => e.message.includes("Read-only flag"))).toBe(false);
+  });
+});
+
+describe("custom partition types", () => {
+  it("accepts a custom type in the 0x40-0xFE user range", () => {
+    const layout = calculateLayout([draftRow({ name: "c", type: "0x40", subtype: "0x00" })], 8);
+    expect(layout.errors.some((e) => e.message.includes("Custom type"))).toBe(false);
+  });
+
+  it("rejects a custom type in the reserved 0x00-0x3F range", () => {
+    const layout = calculateLayout([draftRow({ name: "c", type: "0x20", subtype: "0x00" })], 8);
+    expect(layout.errors.some((e) => e.message.includes("0x40–0xFE"))).toBe(true);
+  });
+
+  it("rejects a custom type above 0xFE", () => {
+    const layout = calculateLayout([draftRow({ name: "c", type: "0xff", subtype: "0x00" })], 8);
+    expect(layout.errors.some((e) => e.message.includes("0x40–0xFE"))).toBe(true);
+  });
+});
+
+describe("calculateLayout — pinned offsets", () => {
+  it("uses a pinned offset verbatim instead of auto-packing", () => {
+    const layout = calculateLayout(
+      [draftRow({ name: "a", size: "16K", pinnedOffset: "0x40000" })],
+      8,
+    );
+    expect(layout.rows[0].offset).toBe(0x40000);
+  });
+
+  it("auto-packs the rows that follow a pinned row", () => {
+    const layout = calculateLayout(
+      [
+        draftRow({ name: "a", size: "16K", pinnedOffset: "0x40000" }),
+        draftRow({ name: "b", size: "16K" }),
+      ],
+      8,
+    );
+    expect(layout.rows[0].offset).toBe(0x40000);
+    expect(layout.rows[1].offset).toBe(0x40000 + 16 * 1024);
+  });
+
+  it("flags a pinned offset that overlaps the previous partition", () => {
+    const layout = calculateLayout(
+      [
+        draftRow({ name: "a", size: "64K" }),
+        draftRow({ name: "b", size: "16K", pinnedOffset: "0x12000" }),
+      ],
+      8,
+    );
+    expect(layout.errors.some((e) => e.message.includes("overlaps earlier content"))).toBe(true);
+  });
+
+  it("flags a pinned data offset that is not 4KB aligned", () => {
+    const layout = calculateLayout(
+      [draftRow({ name: "a", size: "16K", pinnedOffset: "0x40800" })],
+      8,
+    );
+    expect(layout.errors.some((e) => e.message.includes("not 4KB aligned"))).toBe(true);
+  });
+
+  it("treats an empty pinnedOffset as auto-packed", () => {
+    const layout = calculateLayout([draftRow({ name: "a", size: "16K", pinnedOffset: "" })], 8);
+    expect(layout.rows[0].offset).toBe(0x10000);
   });
 });

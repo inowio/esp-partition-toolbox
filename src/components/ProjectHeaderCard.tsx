@@ -11,7 +11,6 @@ interface ProjectHeaderCardProps {
   partitionOffset: string;
   statusMessage: string;
   isBusy: boolean;
-  hasSnapshot: boolean;
   onFlashSizeChange: (value: number) => void;
   onSdkconfigFileChange: (value: string) => void;
   onSyncSdkconfigChange: (value: boolean) => void;
@@ -38,7 +37,6 @@ export default function ProjectHeaderCard({
   partitionOffset,
   statusMessage,
   isBusy,
-  hasSnapshot,
   onFlashSizeChange,
   onSdkconfigFileChange,
   onSyncSdkconfigChange,
@@ -145,8 +143,8 @@ export default function ProjectHeaderCard({
             <button
               type="button"
               onClick={onReset}
-              disabled={!hasSnapshot || isBusy}
-              title="Reset the partition last saved / defaults"
+              disabled={isBusy}
+              title="Discard changes — restore the last loaded project, or the default layout if none is loaded"
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-60"
             >
               <FiRotateCcw />

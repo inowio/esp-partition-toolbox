@@ -9,7 +9,9 @@ const SAMPLE_ROW: PartitionDraftRow = {
   type: "app",
   subtype: "factory",
   size: "1M",
+  pinnedOffset: "",
   encrypted: false,
+  readonly: false,
 };
 
 describe("DeletePartitionModal", () => {

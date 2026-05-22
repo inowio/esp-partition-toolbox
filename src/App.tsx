@@ -42,7 +42,6 @@ function App() {
     rowPendingDelete,
     layout,
     allErrors,
-    hasSnapshot,
     closeConfirmOpen,
     toasts,
     partitionInfoText,
@@ -139,7 +138,6 @@ function App() {
           partitionOffset={partitionOffset}
           statusMessage={statusMessage}
           isBusy={isBusy}
-          hasSnapshot={hasSnapshot}
           onFlashSizeChange={setFlashSizeMb}
           onSdkconfigFileChange={setSdkconfigFile}
           onSyncSdkconfigChange={setSyncSdkconfig}
