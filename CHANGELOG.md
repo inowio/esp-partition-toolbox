@@ -13,17 +13,27 @@ _No changes yet._
 - Project loading: auto-discovers `sdkconfig.defaults` and
   `sdkconfig.defaults.*` variants and honors an existing
   `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`.
-- Visual partition map: proportional, color-coded bar chart of flash usage.
-- Inline partition editing: name, type/subtype dropdowns, size (hex / K / M),
-  and the encrypted flag.
-- Real-time validation: 4 KB alignment checks, flash-boundary overflow, and
-  duplicate name detection, with ESP-IDF partition rules.
+- Visual partition map: a proportional, color-coded bar of flash usage with a
+  legend that names the reserved, partition, and free regions.
+- Inline partition editing: name, type/subtype dropdowns, size (hex / K / M,
+  a drag slider, and fill-to-max), and the `encrypted` and `readonly` flags.
+- Advanced mode: editable/pinnable partition offsets and custom numeric
+  partition types/subtypes (`0x40`–`0xFE`), behind a per-table toggle.
+- Real-time validation: 4 KB / 64 KB alignment, flash-boundary overflow,
+  pinned-offset overlaps, duplicate names, and ESP-IDF partition rules
+  (including the read-only flag's data-only constraint).
 - KPI dashboard for total / allocated / free flash space.
+- Partition Preview card with a live, read-only view of the exact partition
+  CSV, alongside an "Entry for sdkconfig" card — both with one-click copy.
 - Comment preservation as `#` lines in the partition CSV header.
-- Save / Refresh / Reset round-trip with snapshot-based undo, plus optional
+- Save / Refresh / Reset round-trip with snapshot-based undo (Reset also
+  restores the default layout when no project is loaded), plus optional
   `sdkconfig` partition-entry sync.
-- About dialog — version, feature summary, license, source links, and
-  company information — opened from the navbar.
+- Custom right-click menu (cut / copy / paste / delete / select all) on
+  editable fields, backed by the Tauri clipboard plugin so the WebView shows
+  no permission prompts.
+- About and Help dialogs, opened from the navbar — Help is a tabbed reference
+  (getting started, partition types, flags & encryption, key concepts).
 - In-app auto-updater: a silent check on startup that prompts when a newer
   release is available, plus a manual "Check for updates" button in the
   About dialog.

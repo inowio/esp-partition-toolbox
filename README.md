@@ -11,13 +11,15 @@ A desktop GUI for managing ESP-IDF partition tables. Load an ESP-IDF project fol
 ## Highlights
 
 - **Project loading** — auto-discovers `sdkconfig.defaults` / `sdkconfig.defaults.*` and honors an existing `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`
-- **Visual partition map** — proportional, color-coded bar chart of flash usage
-- **Inline editing** — name, type/subtype dropdowns, size (hex / K / M), encrypted flag
-- **Real-time validation** — 4 KB alignment, flash-boundary overflow, duplicate detection, and ESP-IDF partition rules
+- **Visual partition map** — proportional, color-coded bar of flash usage with a labelled legend
+- **Inline editing** — name, type/subtype dropdowns, size (hex / K / M, slider, fill), and the `encrypted` and `readonly` flags
+- **Advanced mode** — pin partition offsets to fixed addresses and define custom numeric partition types
+- **Real-time validation** — 4 KB / 64 KB alignment, flash-boundary overflow, offset overlaps, duplicate detection, and ESP-IDF partition rules
+- **Partition Preview** — a live, copyable view of the exact CSV that gets written, alongside the sdkconfig entries
 - **KPI dashboard** — total / allocated / free space at a glance
 - **Comments** — preserved as `#` lines in the partition CSV header
 - **Save / Refresh / Reset** — full round-trip with snapshot-based undo and optional `sdkconfig` sync
-- **In-app auto-updater** — silent check on startup, plus a manual "Check for updates" button in the About dialog
+- **In-app help & updater** — a tabbed Help reference, a custom right-click menu on every field, and a silent auto-update check (with a manual recheck in the About dialog)
 - Ships as a native desktop app for Windows, macOS, and Linux
 
 ## Install
