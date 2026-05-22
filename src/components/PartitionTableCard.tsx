@@ -123,6 +123,7 @@ function PartitionRow({ row, maxBytes, onUpdateRow, onRequestDelete }: Partition
       <td className="px-3 py-2">
         <input
           value={row.name}
+          maxLength={15}
           onChange={(event) => onUpdateRow(row.id, { name: event.currentTarget.value })}
           onBlur={(event) => onUpdateRow(row.id, { name: event.currentTarget.value.trim() })}
           className="w-full rounded-md border border-slate-300 bg-transparent px-2 py-1 outline-none focus:border-sky-500 dark:border-slate-700"
@@ -294,14 +295,17 @@ export default function PartitionTableCard({
         <table className="w-full min-w-280 border-collapse text-sm">
           <thead className="bg-slate-100 dark:bg-slate-800/90">
             <tr>
-              <th className="px-3 py-2 text-left font-semibold">Name</th>
-              <th className="px-3 py-2 text-left font-semibold">Type</th>
-              <th className="px-3 py-2 text-left font-semibold">Subtype</th>
-              <th className="px-3 py-2 text-left font-semibold">Offset</th>
+              {/* Name / Type / Subtype get fixed widths; Size stays flexible
+                  and absorbs the slack (it holds the slider). Display-only
+                  columns shrink to their content (w-px). */}
+              <th className="w-44 px-3 py-2 text-left font-semibold">Name</th>
+              <th className="w-28 px-3 py-2 text-left font-semibold">Type</th>
+              <th className="w-36 px-3 py-2 text-left font-semibold">Subtype</th>
+              <th className="w-px px-3 py-2 text-left font-semibold whitespace-nowrap">Offset</th>
               <th className="px-3 py-2 text-left font-semibold">Size</th>
-              <th className="px-3 py-2 text-left font-semibold">Hex</th>
-              <th className="px-3 py-2 text-left font-semibold">Flags</th>
-              <th className="px-3 py-2 text-center font-semibold">Action</th>
+              <th className="w-px px-3 py-2 text-left font-semibold whitespace-nowrap">Hex</th>
+              <th className="w-px px-3 py-2 text-left font-semibold whitespace-nowrap">Flags</th>
+              <th className="w-px px-3 py-2 text-center font-semibold whitespace-nowrap">Action</th>
             </tr>
           </thead>
           <tbody>
