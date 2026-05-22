@@ -692,4 +692,296 @@ mod tests {
         assert_eq!(format_size_unit(1536 * 1024), "1536K");
         assert_eq!(format_size_unit(0x1234), "0x1234");
     }
+
+    // ----- numeric helpers -----
+
+    #[test]
+    fn align_up_rounds_to_the_next_multiple() {
+        assert_eq!(align_up(0x1000, 0x1000), 0x1000);
+        assert_eq!(align_up(0x1001, 0x1000), 0x2000);
+        assert_eq!(align_up(0x15000, 0x10000), 0x20000);
+        assert_eq!(align_up(0, 0x1000), 0);
+    }
+
+    #[test]
+    fn align_down_rounds_to_the_previous_multiple() {
+        assert_eq!(align_down(0x1000, 0x1000), 0x1000);
+        assert_eq!(align_down(0x1FFF, 0x1000), 0x1000);
+        assert_eq!(align_down(0x2FFFF, 0x10000), 0x20000);
+        assert_eq!(align_down(0, 0x1000), 0);
+    }
+
+    #[test]
+    fn format_hex_uses_uppercase_with_prefix() {
+        assert_eq!(format_hex(0), "0x0");
+        assert_eq!(format_hex(0x10000), "0x10000");
+        assert_eq!(format_hex(0x1D0000), "0x1D0000");
+    }
+
+    // ----- sdkconfig key extraction -----
+
+    #[test]
+    fn extract_config_string_reads_quoted_and_plain_values() {
+        let content = "CONFIG_A=\"quoted.csv\"\nCONFIG_B=plain\n# CONFIG_C=ignored\n";
+        assert_eq!(extract_config_string(content, "CONFIG_A"), Some("quoted.csv".to_string()));
+        assert_eq!(extract_config_string(content, "CONFIG_B"), Some("plain".to_string()));
+        assert_eq!(extract_config_string(content, "CONFIG_C"), None);
+        assert_eq!(extract_config_string(content, "CONFIG_MISSING"), None);
+    }
+
+    #[test]
+    fn extract_config_u64_parses_decimal_and_hex_values() {
+        let content = "CONFIG_OFFSET=0x8000\nCONFIG_COUNT=4096\nCONFIG_BAD=oops\n";
+        assert_eq!(extract_config_u64(content, "CONFIG_OFFSET"), Some(0x8000));
+        assert_eq!(extract_config_u64(content, "CONFIG_COUNT"), Some(4096));
+        assert_eq!(extract_config_u64(content, "CONFIG_BAD"), None);
+    }
+
+    #[test]
+    fn extract_config_enabled_recognizes_truthy_values() {
+        assert!(extract_config_enabled("CONFIG_X=y\n", "CONFIG_X"));
+        assert!(extract_config_enabled("CONFIG_X=1\n", "CONFIG_X"));
+        assert!(extract_config_enabled("CONFIG_X=true\n", "CONFIG_X"));
+        assert!(!extract_config_enabled("CONFIG_X=n\n", "CONFIG_X"));
+        assert!(!extract_config_enabled("# CONFIG_X is not set\n", "CONFIG_X"));
+        assert!(!extract_config_enabled("", "CONFIG_X"));
+    }
+
+    #[test]
+    fn is_partition_key_line_matches_only_partition_keys() {
+        assert!(is_partition_key_line("CONFIG_PARTITION_TABLE_CUSTOM=y"));
+        assert!(is_partition_key_line("CONFIG_PARTITION_TABLE_OFFSET=0x8000"));
+        assert!(is_partition_key_line("CONFIG_PARTITION_TABLE_MD5=y"));
+        assert!(!is_partition_key_line("CONFIG_IDF_TARGET=\"esp32\""));
+        assert!(!is_partition_key_line("# comment"));
+    }
+
+    #[test]
+    fn normalize_sdkconfig_partition_content_appends_block_to_clean_config() {
+        let original = "CONFIG_IDF_TARGET=\"esp32\"\n";
+        let normalized = normalize_sdkconfig_partition_content(original, "partitions.csv", 0x8000);
+
+        assert!(normalized.contains("CONFIG_IDF_TARGET=\"esp32\""));
+        assert!(normalized.contains("# Partition Table"));
+        assert!(normalized.contains("CONFIG_PARTITION_TABLE_OFFSET=0x8000"));
+        assert!(normalized.ends_with("# end of Partition Table\n"));
+    }
+
+    // ----- filesystem helpers -----
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        let dir = std::env::temp_dir().join(format!("ept_test_{label}_{nanos}_{seq}"));
+        fs::create_dir_all(&dir).expect("create temp project dir");
+        dir
+    }
+
+    fn write_file(dir: &Path, name: &str, content: &str) {
+        fs::write(dir.join(name), content).expect("write fixture file");
+    }
+
+    #[test]
+    fn validate_project_root_accepts_a_folder_with_cmakelists() {
+        let dir = unique_temp_dir("validate_ok");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+
+        assert!(validate_project_root(&dir).is_ok());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn validate_project_root_rejects_missing_cmakelists() {
+        let dir = unique_temp_dir("validate_no_cmake");
+
+        let result = validate_project_root(&dir);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("CMakeLists.txt"));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn validate_project_root_rejects_a_nonexistent_path() {
+        let missing = std::env::temp_dir().join("ept_test_definitely_missing_dir_xyz");
+        assert!(validate_project_root(&missing).is_err());
+    }
+
+    #[test]
+    fn discover_sdkconfig_defaults_files_finds_and_sorts_variants() {
+        let dir = unique_temp_dir("discover");
+        write_file(&dir, "sdkconfig.defaults", "");
+        write_file(&dir, "sdkconfig.defaults.esp32s3", "");
+        write_file(&dir, "sdkconfig.defaults.esp32c3", "");
+
+        let files = discover_sdkconfig_defaults_files(&dir).expect("discover files");
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(
+            names,
+            vec![
+                "sdkconfig.defaults",
+                "sdkconfig.defaults.esp32c3",
+                "sdkconfig.defaults.esp32s3",
+            ]
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn discover_sdkconfig_defaults_files_errors_when_none_exist() {
+        let dir = unique_temp_dir("discover_empty");
+
+        assert!(discover_sdkconfig_defaults_files(&dir).is_err());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn select_sdkconfig_for_save_rejects_non_sdkconfig_filenames() {
+        let dir = unique_temp_dir("select_reject");
+        write_file(&dir, "sdkconfig.defaults", "");
+
+        match select_sdkconfig_for_save(&dir, "notes.txt") {
+            Err(message) => assert!(message.contains("sdkconfig.defaults")),
+            Ok(_) => panic!("expected non-sdkconfig filename to be rejected"),
+        }
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn select_sdkconfig_for_save_accepts_a_valid_defaults_file() {
+        let dir = unique_temp_dir("select_ok");
+        write_file(&dir, "sdkconfig.defaults", "");
+
+        let selection = select_sdkconfig_for_save(&dir, "sdkconfig.defaults").expect("selection");
+        assert_eq!(
+            selection.sdkconfig_file.file_name().unwrap().to_string_lossy(),
+            "sdkconfig.defaults"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ensure_partition_sdkconfig_writes_the_partition_block() {
+        let dir = unique_temp_dir("ensure");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+
+        let selection = select_sdkconfig_for_load(&dir).expect("selection");
+        let result = ensure_partition_sdkconfig(&selection, Some("partitions.csv"), true)
+            .expect("ensure");
+
+        assert!(result.sdkconfig_updated);
+        let written = fs::read_to_string(dir.join("sdkconfig.defaults")).expect("read back");
+        assert!(written.contains("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\""));
+        assert!(written.contains("CONFIG_IDF_TARGET=\"esp32\""));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // ----- command integration tests -----
+
+    #[test]
+    fn load_esp_project_reads_an_existing_partition_file() {
+        let dir = unique_temp_dir("load_existing");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+        write_file(&dir, "partitions.csv", "nvs, data, nvs, 0x10000, 16K,\n");
+
+        let response = load_esp_project(dir.to_string_lossy().to_string(), 4, false)
+            .expect("load project");
+
+        assert!(response.partition_file_exists);
+        assert!(response.partition_content.contains("nvs, data, nvs"));
+        assert_eq!(response.partition_filename, "partitions.csv");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_esp_project_generates_defaults_when_partition_file_is_missing() {
+        let dir = unique_temp_dir("load_default");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+
+        let response = load_esp_project(dir.to_string_lossy().to_string(), 4, false)
+            .expect("load project");
+
+        assert!(!response.partition_file_exists);
+        assert!(response.partition_content.contains("factory, app, factory"));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_esp_project_rejects_a_folder_without_cmakelists() {
+        let dir = unique_temp_dir("load_invalid");
+        write_file(&dir, "sdkconfig.defaults", "");
+
+        let result = load_esp_project(dir.to_string_lossy().to_string(), 4, false);
+        assert!(result.is_err());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_project_state_writes_the_partition_file() {
+        let dir = unique_temp_dir("save_csv");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+
+        let request = SaveProjectRequest {
+            project_path: dir.to_string_lossy().to_string(),
+            sdkconfig_file: dir.join("sdkconfig.defaults").to_string_lossy().to_string(),
+            partition_filename: "partitions.csv".to_string(),
+            partition_content: "nvs, data, nvs, 0x10000, 16K,\n".to_string(),
+            sync_sdkconfig: false,
+        };
+
+        let response = save_project_state(request).expect("save project");
+        assert!(response.partition_file_path.ends_with("partitions.csv"));
+
+        let written = fs::read_to_string(dir.join("partitions.csv")).expect("read partition file");
+        assert_eq!(written, "nvs, data, nvs, 0x10000, 16K,\n");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_project_state_syncs_sdkconfig_when_requested() {
+        let dir = unique_temp_dir("save_sync");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+
+        let request = SaveProjectRequest {
+            project_path: dir.to_string_lossy().to_string(),
+            sdkconfig_file: dir.join("sdkconfig.defaults").to_string_lossy().to_string(),
+            partition_filename: "partitions.csv".to_string(),
+            partition_content: "nvs, data, nvs, 0x10000, 16K,\n".to_string(),
+            sync_sdkconfig: true,
+        };
+
+        let response = save_project_state(request).expect("save project");
+        assert!(response.sdkconfig_updated);
+
+        let sdkconfig = fs::read_to_string(dir.join("sdkconfig.defaults")).expect("read sdkconfig");
+        assert!(sdkconfig.contains("# Partition Table"));
+        assert!(sdkconfig.contains("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\""));
+
+        fs::remove_dir_all(&dir).ok();
+    }
 }

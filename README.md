@@ -38,9 +38,11 @@ npx tauri build
 ## Testing
 
 ```bash
-# Run frontend tests
-npx vitest run
+# Run frontend tests (Vitest + React Testing Library)
+npm run test:run
 
 # Run Rust tests
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+See [TESTING.md](TESTING.md) for the coverage summary and conventions.
