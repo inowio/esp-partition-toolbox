@@ -98,6 +98,13 @@ export default function VisualMapCard({ rows, flashBytes, reservedBytes }: Visua
 
       {rows.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {reservedSpan > 0 && (
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-slate-400 dark:bg-slate-600" />
+              <span className="font-medium">Reserved</span>
+              <span className="text-slate-400 dark:text-slate-500">({formatBytes(reservedBytes)})</span>
+            </div>
+          )}
           {rows.map((row, index) => (
             <div key={row.id} className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
               <span className={`inline-block h-2.5 w-2.5 rounded-sm ${PALETTE[index % PALETTE.length]}`} />
@@ -105,6 +112,13 @@ export default function VisualMapCard({ rows, flashBytes, reservedBytes }: Visua
               <span className="text-slate-400 dark:text-slate-500">({row.size})</span>
             </div>
           ))}
+          {freeBytes > 0 && (
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-slate-200 dark:bg-slate-700/50" />
+              <span className="font-medium">Free</span>
+              <span className="text-slate-400 dark:text-slate-500">({formatBytes(freeBytes)})</span>
+            </div>
+          )}
         </div>
       )}
     </article>

@@ -87,48 +87,98 @@
 }
 
 @layer components {
+  /*
+    Size slider — sized for accessibility (WCAG 2.5.8 target size). The input
+    itself is 24px tall so the whole strip is an easy pointer/touch target,
+    while the visible track stays a slim 6px and the thumb is a clear 20px.
+  */
   input[type="range"].size-slider {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 4px;
-    border-radius: 2px;
-    background: rgb(203 213 225); /* slate-300 */
+    height: 24px;
+    background: transparent;
     outline: none;
     cursor: pointer;
   }
 
-  .dark input[type="range"].size-slider {
+  /* ----- Track ----- */
+  input[type="range"].size-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(203 213 225); /* slate-300 */
+  }
+
+  .dark input[type="range"].size-slider::-webkit-slider-runnable-track {
     background: rgb(71 85 105); /* slate-600 */
   }
 
+  input[type="range"].size-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(203 213 225);
+  }
+
+  .dark input[type="range"].size-slider::-moz-range-track {
+    background: rgb(71 85 105);
+  }
+
+  /* ----- Thumb ----- */
   input[type="range"].size-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
+    margin-top: -7px; /* centre the 20px thumb on the 6px track */
     border-radius: 50%;
     background: rgb(14 165 233); /* sky-500 */
-    cursor: pointer;
     border: 2px solid white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  }
-
-  .dark input[type="range"].size-slider::-webkit-slider-thumb {
-    border-color: rgb(30 41 59); /* slate-800 */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
   }
 
   input[type="range"].size-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: rgb(14 165 233);
-    cursor: pointer;
     border: 2px solid white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
   }
 
+  .dark input[type="range"].size-slider::-webkit-slider-thumb,
   .dark input[type="range"].size-slider::-moz-range-thumb {
-    border-color: rgb(30 41 59);
+    border-color: rgb(30 41 59); /* slate-800 */
+  }
+
+  /* Hover / drag feedback */
+  input[type="range"].size-slider:hover:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.1);
+  }
+
+  input[type="range"].size-slider:active:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.18);
+    background: rgb(2 132 199); /* sky-600 */
+  }
+
+  input[type="range"].size-slider:hover:not(:disabled)::-moz-range-thumb {
+    transform: scale(1.1);
+  }
+
+  input[type="range"].size-slider:active:not(:disabled)::-moz-range-thumb {
+    transform: scale(1.18);
+    background: rgb(2 132 199);
+  }
+
+  /* Keyboard focus ring — restores a visible focus indicator */
+  input[type="range"].size-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.4);
+  }
+
+  input[type="range"].size-slider:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.4);
   }
 }

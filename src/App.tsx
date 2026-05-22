@@ -9,6 +9,7 @@ import DeletePartitionModal from "./components/DeletePartitionModal";
 import ErrorCard from "./components/ErrorCard";
 import KpiCards from "./components/KpiCards";
 import PartitionInformationCard from "./components/PartitionInformationCard";
+import PartitionPreviewCard from "./components/PartitionPreviewCard";
 import PartitionTableCard from "./components/PartitionTableCard";
 import ProjectHeaderCard from "./components/ProjectHeaderCard";
 import ToastStack from "./components/ToastStack";
@@ -43,6 +44,7 @@ function App() {
     closeConfirmOpen,
     toasts,
     partitionInfoText,
+    partitionCsvText,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,
@@ -167,14 +169,16 @@ function App() {
         />
 
         <div className="grid gap-4 xl:grid-cols-2">
+          <PartitionPreviewCard csv={partitionCsvText} />
+
           <PartitionInformationCard
             partitionInfo={partitionInfoText}
             onCopy={copyPartitionInfo}
             isBusy={isBusy}
           />
-
-          <CommentsCard comments={comments} onCommentsChange={setComments} />
         </div>
+
+        <CommentsCard comments={comments} onCommentsChange={setComments} />
       </main>
 
       <DeletePartitionModal

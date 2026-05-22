@@ -100,6 +100,7 @@ export interface PartitionProjectState {
   closeConfirmOpen: boolean;
   toasts: ToastMessage[];
   partitionInfoText: string;
+  partitionCsvText: string;
 }
 
 export interface PartitionProjectActions {
@@ -200,6 +201,12 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   const partitionInfoText = useMemo(
     () => buildPartitionInfoBlock(partitionFilename, partitionOffset),
     [partitionFilename, partitionOffset],
+  );
+
+  // The exact CSV that saveProject would write — kept in sync for the preview.
+  const partitionCsvText = useMemo(
+    () => serializePartitionCsvForFlash(comments, layout.rows, flashSizeMb),
+    [comments, layout.rows, flashSizeMb],
   );
 
   function pushToast(message: string, kind: ToastMessage["kind"]): void {
@@ -474,6 +481,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     closeConfirmOpen: closeConfirm.open,
     toasts,
     partitionInfoText,
+    partitionCsvText,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,
