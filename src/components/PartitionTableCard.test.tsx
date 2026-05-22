@@ -19,17 +19,22 @@ function makeLayoutRow(overrides: Partial<PartitionLayoutRow>): PartitionLayoutR
   };
 }
 
-const USABLE_BYTES = 8 * 1024 * 1024;
+const FLASH_BYTES = 8 * 1024 * 1024;
 
-function renderCard(rows: PartitionLayoutRow[], handlers: Partial<{
-  onAddRow: () => void;
-  onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
-  onRequestDelete: (row: PartitionDraftRow) => void;
-}> = {}) {
+function renderCard(
+  rows: PartitionLayoutRow[],
+  handlers: Partial<{
+    onAddRow: () => void;
+    onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
+    onRequestDelete: (row: PartitionDraftRow) => void;
+  }> = {},
+  options: { flashBytes?: number; freeBytes?: number } = {},
+) {
   return render(
     <PartitionTableCard
       rows={rows}
-      usableBytes={USABLE_BYTES}
+      flashBytes={options.flashBytes ?? FLASH_BYTES}
+      freeBytes={options.freeBytes ?? 0}
       onAddRow={handlers.onAddRow ?? (() => undefined)}
       onUpdateRow={handlers.onUpdateRow ?? (() => undefined)}
       onRequestDelete={handlers.onRequestDelete ?? (() => undefined)}
@@ -115,5 +120,50 @@ describe("PartitionTableCard", () => {
       makeLayoutRow({ id: "r2", name: "factory" }),
     ]);
     expect(screen.getAllByTitle("Delete partition")).toHaveLength(2);
+  });
+
+  it("clamps a typed size to the space available from the row's offset", () => {
+    const onUpdateRow = vi.fn();
+    // 2 MB flash, partition at 0x20000 → ceiling is 0x1E0000 = 1920 KB.
+    const row = makeLayoutRow({
+      id: "r1",
+      name: "factory",
+      type: "app",
+      subtype: "factory",
+      offset: 0x20000,
+      size: "1024K",
+      sizeBytes: 0x100000,
+      end: 0x120000,
+    });
+    renderCard([row], { onUpdateRow }, { flashBytes: 2 * 1024 * 1024 });
+
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "9000" } });
+    expect(onUpdateRow).toHaveBeenCalledWith("r1", { size: "1920K" });
+  });
+
+  it("fills the partition with the remaining free space", () => {
+    const onUpdateRow = vi.fn();
+    const row = makeLayoutRow({
+      id: "r1",
+      name: "factory",
+      type: "app",
+      subtype: "factory",
+      offset: 0x20000,
+      size: "1024K",
+      sizeBytes: 0x100000,
+      end: 0x120000,
+    });
+    // 0xE0000 (896 KB) free → 0x100000 + 0xE0000 = 0x1E0000 = 1920 KB.
+    renderCard([row], { onUpdateRow }, { flashBytes: 2 * 1024 * 1024, freeBytes: 0xe0000 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fill remaining free space" }));
+    expect(onUpdateRow).toHaveBeenCalledWith("r1", { size: "1920K" });
+  });
+
+  it("disables the fill button when no space is free", () => {
+    renderCard([makeLayoutRow({})], {}, { freeBytes: 0 });
+    expect(
+      screen.getByRole("button", { name: "Fill remaining free space" }),
+    ).toBeDisabled();
   });
 });

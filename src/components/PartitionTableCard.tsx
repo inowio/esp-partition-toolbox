@@ -1,4 +1,4 @@
-import { FiPlus, FiShield, FiTrash2 } from "react-icons/fi";
+import { FiMaximize2, FiPlus, FiShield, FiTrash2 } from "react-icons/fi";
 import type { PartitionDraftRow, PartitionLayoutRow } from "../types";
 import {
   getDefaultSubtypeForType,
@@ -42,10 +42,17 @@ const SIZE_UNITS: SizeUnit[] = ["B", "K", "M"];
 const UNIT_LABELS: Record<SizeUnit, string> = { B: "Bytes", K: "KB", M: "MB" };
 const UNIT_STEPS: Record<SizeUnit, number> = { B: 4096, K: 4, M: 1 };
 const UNIT_MINS: Record<SizeUnit, number> = { B: 4096, K: 4, M: 1 };
+const UNIT_BYTES: Record<SizeUnit, number> = { B: 1, K: 1024, M: 1024 * 1024 };
+
+// Largest whole value expressible in `unit` that still fits within `maxBytes`.
+function maxValueForUnit(maxBytes: number, unit: SizeUnit): number {
+  return Math.max(Math.floor(maxBytes / UNIT_BYTES[unit]), UNIT_MINS[unit]);
+}
 
 interface PartitionTableCardProps {
   rows: PartitionLayoutRow[];
-  usableBytes: number;
+  flashBytes: number;
+  freeBytes: number;
   onAddRow: () => void;
   onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
   onRequestDelete: (row: PartitionDraftRow) => void;
@@ -57,12 +64,13 @@ function normalizeSelectValue(value: string): string {
 
 export default function PartitionTableCard({
   rows,
-  usableBytes,
+  flashBytes,
+  freeBytes,
   onAddRow,
   onUpdateRow,
   onRequestDelete,
 }: PartitionTableCardProps) {
-  const sliderMax = Math.max(usableBytes, SLIDER_MIN_BYTES * 2);
+  const canFill = freeBytes > 0;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -102,6 +110,11 @@ export default function PartitionTableCard({
                 normalizedSubtype,
               );
               const { value: sizeValue, unit: sizeUnit } = parseSizeString(row.size);
+
+              // A partition can never grow past the flash boundary: its ceiling
+              // is the span from its own offset to the end of flash.
+              const rowMaxBytes = Math.max(flashBytes - row.offset, SLIDER_MIN_BYTES);
+              const maxValueInUnit = maxValueForUnit(rowMaxBytes, sizeUnit);
 
               return (
                 <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700">
@@ -158,12 +171,16 @@ export default function PartitionTableCard({
                         type="number"
                         value={sizeValue}
                         min={UNIT_MINS[sizeUnit]}
+                        max={maxValueInUnit}
                         step={UNIT_STEPS[sizeUnit]}
                         onChange={(event) => {
                           const next = Number(event.currentTarget.value);
-                          if (next >= 0) {
-                            onUpdateRow(row.id, { size: composeSizeString(next, sizeUnit) });
+                          if (!Number.isFinite(next) || next < 0) {
+                            return;
                           }
+                          // Never accept a size that would cross the flash boundary.
+                          const clamped = Math.min(next, maxValueInUnit);
+                          onUpdateRow(row.id, { size: composeSizeString(clamped, sizeUnit) });
                         }}
                         className="w-20 min-w-0 flex-1 rounded-md border border-slate-300 bg-transparent px-2 py-1 font-mono outline-none focus:border-sky-500 dark:border-slate-700"
                       />
@@ -172,7 +189,8 @@ export default function PartitionTableCard({
                         onChange={(event) => {
                           const nextUnit = event.currentTarget.value as SizeUnit;
                           const converted = convertSizeUnit(sizeValue, sizeUnit, nextUnit);
-                          onUpdateRow(row.id, { size: composeSizeString(converted, nextUnit) });
+                          const clamped = Math.min(converted, maxValueForUnit(rowMaxBytes, nextUnit));
+                          onUpdateRow(row.id, { size: composeSizeString(clamped, nextUnit) });
                         }}
                         className="w-18 rounded-md border border-slate-300 bg-transparent px-1 py-1 text-xs outline-none focus:border-sky-500 dark:border-slate-700"
                       >
@@ -182,19 +200,34 @@ export default function PartitionTableCard({
                           </option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateRow(row.id, {
+                            size: formatSizeToPartitionUnit(row.sizeBytes + freeBytes),
+                          })
+                        }
+                        disabled={!canFill}
+                        title="Fill remaining free space"
+                        aria-label="Fill remaining free space"
+                        className="inline-flex items-center justify-center rounded-md border border-slate-300 px-2 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        <FiMaximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
                     </div>
                     <input
                       type="range"
                       min={0}
                       max={SLIDER_RESOLUTION}
-                      value={bytesToSliderPosition(row.sizeBytes || SLIDER_MIN_BYTES, sliderMax)}
+                      value={bytesToSliderPosition(row.sizeBytes || SLIDER_MIN_BYTES, rowMaxBytes)}
                       onChange={(event) => {
-                        const bytes = sliderPositionToBytes(Number(event.currentTarget.value), sliderMax);
+                        const bytes = sliderPositionToBytes(Number(event.currentTarget.value), rowMaxBytes);
                         const converted = convertSizeUnit(bytes, "B", sizeUnit);
-                        onUpdateRow(row.id, { size: composeSizeString(converted, sizeUnit) });
+                        const clamped = Math.min(converted, maxValueInUnit);
+                        onUpdateRow(row.id, { size: composeSizeString(clamped, sizeUnit) });
                       }}
                       className="size-slider mt-1.5"
-                      title={`Drag to resize (4K — ${formatSizeToPartitionUnit(sliderMax)})`}
+                      title={`Drag to resize (4K — ${formatSizeToPartitionUnit(rowMaxBytes)})`}
                     />
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
