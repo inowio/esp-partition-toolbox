@@ -9,12 +9,13 @@ import {
   formatBytes,
   formatHex,
   formatSizeToPartitionUnit,
+  maxSizeBytesForRow,
   normalizeSizeInput,
   parsePartitionCsv,
   parseSizeToBytes,
   serializePartitionCsv,
 } from "./partition";
-import type { PartitionDraftRow } from "../types";
+import type { PartitionDraftRow, PartitionLayoutRow } from "../types";
 
 describe("parseSizeToBytes", () => {
   it("parses hex values", () => {
@@ -525,6 +526,17 @@ describe("calculateLayout", () => {
     expect(layout.free).toBe(usable - 64 * 1024);
   });
 
+  it("counts alignment gaps as free space, not only trailing space", () => {
+    // The default layout's 64 KB-aligned app partition leaves a gap after the
+    // small data partitions — that gap is unallocated and must count as free.
+    const layout = calculateLayout(defaultRowsForFlashSize(2), 2);
+    const lastRow = layout.rows[layout.rows.length - 1];
+
+    expect(lastRow.end).toBe(layout.flashBytes); // nothing trails the last row
+    expect(layout.free).toBeGreaterThan(0); // ...yet there is still room
+    expect(layout.free).toBe(layout.usable - layout.allocated);
+  });
+
   it("emits blocking error for partitions exceeding flash boundary", () => {
     const rows = makeRows(["2M"]);
     const layout = calculateLayout(rows, 2);
@@ -1020,5 +1032,61 @@ describe("round-trip: parse → layout → serialize → parse", () => {
       expect(layout2.rows).toHaveLength(layout1.rows.length);
       expect(layout2.allocated).toBe(layout1.allocated);
     }
+  });
+});
+
+describe("maxSizeBytesForRow", () => {
+  function layoutRow(overrides: Partial<PartitionLayoutRow>): PartitionLayoutRow {
+    return {
+      id: "x",
+      name: "p",
+      type: "data",
+      subtype: "nvs",
+      size: "16K",
+      encrypted: false,
+      offset: 0x10000,
+      end: 0x14000,
+      sizeBytes: 0x4000,
+      flags: "",
+      ...overrides,
+    };
+  }
+
+  it("gives the last row everything up to the flash boundary", () => {
+    const rows = [layoutRow({ offset: 0x20000 })];
+    expect(maxSizeBytesForRow(rows, 0, 0x200000)).toBe(0x200000 - 0x20000);
+  });
+
+  it("reserves room for the partitions after the row", () => {
+    // nvs, then phy_init (4 KB), then a 1920 KB app partition pinned to a
+    // 64 KB grid — nvs can grow to 60 KB before crowding them out.
+    const rows = [
+      layoutRow({ offset: 0x10000, sizeBytes: 0x4000 }),
+      layoutRow({ type: "data", offset: 0x14000, sizeBytes: 0x1000 }),
+      layoutRow({ type: "app", offset: 0x20000, sizeBytes: 0x1e0000 }),
+    ];
+    expect(maxSizeBytesForRow(rows, 0, 0x200000)).toBe(0xf000); // 60 KB
+  });
+
+  it("does not depend on the row's own current size", () => {
+    const shrunk = [
+      layoutRow({ offset: 0x10000, sizeBytes: 0x1000 }),
+      layoutRow({ type: "app", offset: 0x20000, sizeBytes: 0x1e0000 }),
+    ];
+    const grown = [
+      layoutRow({ offset: 0x10000, sizeBytes: 0x100000 }),
+      layoutRow({ type: "app", offset: 0x20000, sizeBytes: 0x1e0000 }),
+    ];
+    expect(maxSizeBytesForRow(shrunk, 0, 0x200000)).toBe(
+      maxSizeBytesForRow(grown, 0, 0x200000),
+    );
+  });
+
+  it("never returns less than one 4 KB sector", () => {
+    const rows = [
+      layoutRow({ offset: 0x10000 }),
+      layoutRow({ type: "app", offset: 0x20000, sizeBytes: 0x1000000 }),
+    ];
+    expect(maxSizeBytesForRow(rows, 0, 0x200000)).toBe(0x1000);
   });
 });

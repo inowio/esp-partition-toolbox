@@ -124,11 +124,11 @@ export default function ProjectHeaderCard({
               type="button"
               onClick={onSave}
               disabled={!projectPath || isBusy}
-              title="Save to partition file"
+              title="Export / Save to partition (csv) file"
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
             >
               <FiSave />
-              Save
+              Save / Export
             </button>
 
             <button

@@ -19,7 +19,7 @@ function makeLayoutRow(overrides: Partial<PartitionLayoutRow>): PartitionLayoutR
   };
 }
 
-const FLASH_BYTES = 8 * 1024 * 1024;
+const DEFAULT_FLASH_BYTES = 8 * 1024 * 1024;
 
 function renderCard(
   rows: PartitionLayoutRow[],
@@ -28,13 +28,12 @@ function renderCard(
     onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
     onRequestDelete: (row: PartitionDraftRow) => void;
   }> = {},
-  options: { flashBytes?: number; freeBytes?: number } = {},
+  options: { flashBytes?: number } = {},
 ) {
   return render(
     <PartitionTableCard
       rows={rows}
-      flashBytes={options.flashBytes ?? FLASH_BYTES}
-      freeBytes={options.freeBytes ?? 0}
+      flashBytes={options.flashBytes ?? DEFAULT_FLASH_BYTES}
       onAddRow={handlers.onAddRow ?? (() => undefined)}
       onUpdateRow={handlers.onUpdateRow ?? (() => undefined)}
       onRequestDelete={handlers.onRequestDelete ?? (() => undefined)}
@@ -122,9 +121,9 @@ describe("PartitionTableCard", () => {
     expect(screen.getAllByTitle("Delete partition")).toHaveLength(2);
   });
 
-  it("clamps a typed size to the space available from the row's offset", () => {
+  it("clamps a typed size to the space available up to the flash boundary", () => {
     const onUpdateRow = vi.fn();
-    // 2 MB flash, partition at 0x20000 → ceiling is 0x1E0000 = 1920 KB.
+    // 2 MB flash, partition at 0x20000, nothing after it → ceiling 1920 KB.
     const row = makeLayoutRow({
       id: "r1",
       name: "factory",
@@ -141,7 +140,21 @@ describe("PartitionTableCard", () => {
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { size: "1920K" });
   });
 
-  it("fills the partition with the remaining free space", () => {
+  it("does not let a row grow into space owned by a later partition", () => {
+    const onUpdateRow = vi.fn();
+    // nvs (64 KB) is followed by a 1920 KB app partition on a 2 MB flash —
+    // nvs is already at its ceiling and cannot grow.
+    const rows = [
+      makeLayoutRow({ id: "r1", offset: 0x10000, size: "64K", sizeBytes: 0x10000 }),
+      makeLayoutRow({ id: "r2", type: "app", offset: 0x20000, sizeBytes: 0x1e0000 }),
+    ];
+    renderCard(rows, { onUpdateRow }, { flashBytes: 2 * 1024 * 1024 });
+
+    fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "5000" } });
+    expect(onUpdateRow).toHaveBeenCalledWith("r1", { size: "64K" });
+  });
+
+  it("fills the partition to its maximum size", () => {
     const onUpdateRow = vi.fn();
     const row = makeLayoutRow({
       id: "r1",
@@ -153,15 +166,22 @@ describe("PartitionTableCard", () => {
       sizeBytes: 0x100000,
       end: 0x120000,
     });
-    // 0xE0000 (896 KB) free → 0x100000 + 0xE0000 = 0x1E0000 = 1920 KB.
-    renderCard([row], { onUpdateRow }, { flashBytes: 2 * 1024 * 1024, freeBytes: 0xe0000 });
+    // 2 MB flash, nothing after the row → max is 0x1E0000 = 1920 KB.
+    renderCard([row], { onUpdateRow }, { flashBytes: 2 * 1024 * 1024 });
 
     fireEvent.click(screen.getByRole("button", { name: "Fill remaining free space" }));
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { size: "1920K" });
   });
 
-  it("disables the fill button when no space is free", () => {
-    renderCard([makeLayoutRow({})], {}, { freeBytes: 0 });
+  it("disables the fill button when the partition is already at its maximum", () => {
+    const row = makeLayoutRow({
+      id: "r1",
+      offset: 0x20000,
+      size: "1920K",
+      sizeBytes: 0x1e0000,
+      end: 0x200000,
+    });
+    renderCard([row], {}, { flashBytes: 2 * 1024 * 1024 });
     expect(
       screen.getByRole("button", { name: "Fill remaining free space" }),
     ).toBeDisabled();
@@ -182,5 +202,26 @@ describe("PartitionTableCard", () => {
     expect(onUpdateRow.mock.calls[0][0]).toBe("r1");
     // The thumb stays where it was dragged instead of snapping back.
     expect((slider as HTMLInputElement).value).toBe("250");
+  });
+
+  it("pins the slider right and locks it for a maxed-out 4 KB partition", () => {
+    // A 4 KB partition pinned against the flash boundary cannot move at all.
+    renderCard(
+      [
+        makeLayoutRow({
+          id: "r1",
+          name: "phy_init",
+          size: "4K",
+          sizeBytes: 0x1000,
+          offset: 0x1ff000,
+        }),
+      ],
+      {},
+      { flashBytes: 2 * 1024 * 1024 },
+    );
+
+    const slider = screen.getByRole("slider") as HTMLInputElement;
+    expect(slider.value).toBe("500");
+    expect(slider).toBeDisabled();
   });
 });

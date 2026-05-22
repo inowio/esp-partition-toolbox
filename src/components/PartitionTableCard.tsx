@@ -12,6 +12,7 @@ import {
   convertSizeUnit,
   formatHex,
   formatSizeToPartitionUnit,
+  maxSizeBytesForRow,
   parseSizeString,
 } from "../utils/partition";
 import type { SizeUnit } from "../utils/partition";
@@ -32,8 +33,10 @@ function sliderPositionToBytes(position: number, maxBytes: number): number {
 }
 
 function bytesToSliderPosition(bytes: number, maxBytes: number): number {
-  if (bytes <= SLIDER_MIN_BYTES) return 0;
+  // Check the ceiling first: a partition sitting at its maximum belongs on
+  // the right even if that maximum is the 4 KB floor.
   if (bytes >= maxBytes) return SLIDER_RESOLUTION;
+  if (bytes <= SLIDER_MIN_BYTES) return 0;
 
   const minLog = Math.log(SLIDER_MIN_BYTES);
   const maxLog = Math.log(Math.max(maxBytes, SLIDER_MIN_BYTES * 2));
@@ -63,19 +66,12 @@ function normalizeSelectValue(value: string): string {
 
 interface PartitionRowProps {
   row: PartitionLayoutRow;
-  flashBytes: number;
-  freeBytes: number;
+  maxBytes: number;
   onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
   onRequestDelete: (row: PartitionDraftRow) => void;
 }
 
-function PartitionRow({
-  row,
-  flashBytes,
-  freeBytes,
-  onUpdateRow,
-  onRequestDelete,
-}: PartitionRowProps) {
+function PartitionRow({ row, maxBytes, onUpdateRow, onRequestDelete }: PartitionRowProps) {
   const normalizedType = normalizeSelectValue(row.type) || "data";
   const normalizedSubtype = normalizeSelectValue(row.subtype);
   const typeOptions = withCurrentOption(PARTITION_TYPE_OPTIONS, normalizedType);
@@ -85,37 +81,39 @@ function PartitionRow({
   );
   const { value: sizeValue, unit: sizeUnit } = parseSizeString(row.size);
 
-  // A partition can never grow past the flash boundary: its ceiling is the
-  // span from its own offset to the end of flash.
-  const rowMaxBytes = Math.max(flashBytes - row.offset, SLIDER_MIN_BYTES);
-  const maxValueInUnit = maxValueForUnit(rowMaxBytes, sizeUnit);
+  const maxValueInUnit = maxValueForUnit(maxBytes, sizeUnit);
+  // When a partition is stuck at the 4 KB minimum with no room to grow, the
+  // slider has nothing left to do — lock it instead of leaving a dead control.
+  const sliderLocked = maxBytes <= SLIDER_MIN_BYTES;
+  const canFill = row.sizeBytes < maxBytes;
 
   // The slider thumb is local state so a drag stays smooth — deriving it from
   // the 4 KB-snapped committed size would yank the thumb back every render.
   const [sliderPos, setSliderPos] = useState(() =>
-    bytesToSliderPosition(row.sizeBytes || SLIDER_MIN_BYTES, rowMaxBytes),
+    bytesToSliderPosition(row.sizeBytes || SLIDER_MIN_BYTES, maxBytes),
   );
   // What our own last slider commit produced, so the sync effect can tell an
-  // outside change (typing, unit toggle, fill, flash resize) from our drag.
+  // outside change (typing, unit toggle, fill, a resized neighbour) from our
+  // own drag.
   const sliderCommit = useRef<{ bytes: number; max: number } | null>(null);
 
   useEffect(() => {
     const sizeBytes = row.sizeBytes || SLIDER_MIN_BYTES;
     const commit = sliderCommit.current;
-    if (commit && commit.bytes === sizeBytes && commit.max === rowMaxBytes) {
+    if (commit && commit.bytes === sizeBytes && commit.max === maxBytes) {
       // This size is exactly what our slider drag committed — keep the thumb.
       return;
     }
-    setSliderPos(bytesToSliderPosition(sizeBytes, rowMaxBytes));
-  }, [row.sizeBytes, rowMaxBytes]);
+    setSliderPos(bytesToSliderPosition(sizeBytes, maxBytes));
+  }, [row.sizeBytes, maxBytes]);
 
   function handleSliderChange(position: number): void {
     setSliderPos(position);
-    const bytes = sliderPositionToBytes(position, rowMaxBytes);
+    const bytes = sliderPositionToBytes(position, maxBytes);
     const value = Math.min(convertSizeUnit(bytes, "B", sizeUnit), maxValueInUnit);
     sliderCommit.current = {
       bytes: committedBytesForSize(value, sizeUnit),
-      max: rowMaxBytes,
+      max: maxBytes,
     };
     onUpdateRow(row.id, { size: composeSizeString(value, sizeUnit) });
   }
@@ -182,7 +180,7 @@ function PartitionRow({
               if (!Number.isFinite(next) || next < 0) {
                 return;
               }
-              // Never accept a size that would cross the flash boundary.
+              // Never accept a size that would overrun a later partition.
               const clamped = Math.min(next, maxValueInUnit);
               onUpdateRow(row.id, { size: composeSizeString(clamped, sizeUnit) });
             }}
@@ -193,7 +191,7 @@ function PartitionRow({
             onChange={(event) => {
               const nextUnit = event.currentTarget.value as SizeUnit;
               const converted = convertSizeUnit(sizeValue, sizeUnit, nextUnit);
-              const clamped = Math.min(converted, maxValueForUnit(rowMaxBytes, nextUnit));
+              const clamped = Math.min(converted, maxValueForUnit(maxBytes, nextUnit));
               onUpdateRow(row.id, { size: composeSizeString(clamped, nextUnit) });
             }}
             className="w-18 rounded-md border border-slate-300 bg-transparent px-1 py-1 text-xs outline-none focus:border-sky-500 dark:border-slate-700"
@@ -207,11 +205,9 @@ function PartitionRow({
           <button
             type="button"
             onClick={() =>
-              onUpdateRow(row.id, {
-                size: formatSizeToPartitionUnit(row.sizeBytes + freeBytes),
-              })
+              onUpdateRow(row.id, { size: formatSizeToPartitionUnit(maxBytes) })
             }
-            disabled={freeBytes <= 0}
+            disabled={!canFill}
             title="Fill remaining free space"
             aria-label="Fill remaining free space"
             className="inline-flex items-center justify-center rounded-md border border-slate-300 px-2 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -224,9 +220,14 @@ function PartitionRow({
           min={0}
           max={SLIDER_RESOLUTION}
           value={sliderPos}
+          disabled={sliderLocked}
           onChange={(event) => handleSliderChange(Number(event.currentTarget.value))}
-          className="size-slider mt-1.5"
-          title={`Drag to resize (4K — ${formatSizeToPartitionUnit(rowMaxBytes)})`}
+          className="size-slider mt-1.5 disabled:cursor-not-allowed disabled:opacity-40"
+          title={
+            sliderLocked
+              ? "No room to resize — free up space in another partition first"
+              : `Drag to resize (4K — ${formatSizeToPartitionUnit(maxBytes)})`
+          }
         />
       </td>
       <td className="px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
@@ -263,7 +264,6 @@ function PartitionRow({
 interface PartitionTableCardProps {
   rows: PartitionLayoutRow[];
   flashBytes: number;
-  freeBytes: number;
   onAddRow: () => void;
   onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
   onRequestDelete: (row: PartitionDraftRow) => void;
@@ -272,7 +272,6 @@ interface PartitionTableCardProps {
 export default function PartitionTableCard({
   rows,
   flashBytes,
-  freeBytes,
   onAddRow,
   onUpdateRow,
   onRequestDelete,
@@ -306,12 +305,11 @@ export default function PartitionTableCard({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row, index) => (
               <PartitionRow
                 key={row.id}
                 row={row}
-                flashBytes={flashBytes}
-                freeBytes={freeBytes}
+                maxBytes={maxSizeBytesForRow(rows, index, flashBytes)}
                 onUpdateRow={onUpdateRow}
                 onRequestDelete={onRequestDelete}
               />

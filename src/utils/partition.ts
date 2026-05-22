@@ -379,7 +379,9 @@ export function calculateLayout(
   }
 
   const allocated = layoutRows.reduce((sum, row) => sum + row.sizeBytes, 0);
-  const free = Math.max(flashBytes - cursor, 0);
+  // Unallocated flash within the usable region — counts alignment gaps
+  // between partitions, not just the space trailing the last partition.
+  const free = Math.max(usable - allocated, 0);
 
   if (cursor > flashBytes) {
     errors.push({ message: "Allocated partition size exceeds available flash space.", severity: "blocking" });
@@ -466,6 +468,35 @@ function validatePartitionRules(rows: PartitionLayoutRow[], errors: ValidationEr
       errors.push({ message: "All OTA app partitions should have the same size.", severity: "warning" });
     }
   }
+}
+
+/**
+ * Largest size (bytes, 4 KB-aligned) the partition at `index` can take without
+ * pushing a later partition past the flash boundary. It depends only on this
+ * row's offset and the partitions after it — never on the row's own current
+ * size — so a partition can always be grown back after it has been shrunk.
+ */
+export function maxSizeBytesForRow(
+  rows: PartitionLayoutRow[],
+  index: number,
+  flashBytes: number,
+): number {
+  const row = rows[index];
+  if (!row) {
+    return SECTOR_SIZE;
+  }
+
+  // Walk the later partitions from the flash boundary backward, pinning each
+  // to the latest offset it could legally occupy. What is left is the latest
+  // offset this row may end at — and therefore its largest size.
+  let latestEnd = flashBytes;
+  for (let laterIndex = rows.length - 1; laterIndex > index; laterIndex -= 1) {
+    const later = rows[laterIndex];
+    const alignment = later.type.trim().toLowerCase() === "app" ? APP_ALIGNMENT : SECTOR_SIZE;
+    latestEnd = Math.floor((latestEnd - later.sizeBytes) / alignment) * alignment;
+  }
+
+  return Math.max(latestEnd - row.offset, SECTOR_SIZE);
 }
 
 export function serializePartitionCsv(comments: string, rows: PartitionLayoutRow[]): string {

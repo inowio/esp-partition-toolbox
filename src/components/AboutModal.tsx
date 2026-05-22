@@ -205,10 +205,17 @@ export default function AboutModal({
 
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
+              {/* Theme-specific marks — the dark logo is white, invisible on
+                  a light background, so each theme gets its own file. */}
               <img
-                src="/inowio-logo.svg"
+                src="/inowio-logo-light.svg"
                 alt="Inowio Technologies LLP logo"
-                className="h-10 w-10 shrink-0"
+                className="h-10 w-10 shrink-0 dark:hidden"
+              />
+              <img
+                src="/inowio-logo-dark.svg"
+                alt="Inowio Technologies LLP logo"
+                className="hidden h-10 w-10 shrink-0 dark:block"
               />
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">

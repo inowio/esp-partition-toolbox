@@ -141,7 +141,6 @@ function App() {
         <PartitionTableCard
           rows={layout.rows}
           flashBytes={layout.flashBytes}
-          freeBytes={layout.free}
           onAddRow={addRow}
           onUpdateRow={updateRow}
           onRequestDelete={setRowPendingDelete}
