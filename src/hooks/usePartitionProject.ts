@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
   LoadProjectResponse,
@@ -226,13 +227,13 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
 
   async function copyPartitionInfo(): Promise<void> {
     try {
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(partitionInfoText);
-        pushToast("Partition information copied to clipboard.", "success");
-        return;
-      }
+      // Route through the Tauri clipboard plugin (Rust backend) — no WebView
+      // permission prompt, consistent with the editable-field context menu.
+      await writeText(partitionInfoText);
+      pushToast("Partition information copied to clipboard.", "success");
+      return;
     } catch {
-      // Fall through to legacy copy API.
+      // Fall through to the legacy copy path (e.g. browser-only dev server).
     }
 
     if (fallbackCopyText(partitionInfoText)) {

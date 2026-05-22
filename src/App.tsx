@@ -3,6 +3,7 @@ import "./App.css";
 import AboutModal from "./components/AboutModal";
 import AppNavbar from "./components/AppNavbar";
 import CommentsCard from "./components/CommentsCard";
+import EditableContextMenu from "./components/EditableContextMenu";
 import CloseProjectModal from "./components/CloseProjectModal";
 import DeletePartitionModal from "./components/DeletePartitionModal";
 import ErrorCard from "./components/ErrorCard";
@@ -83,6 +84,25 @@ function App() {
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Suppress the WebView's browser context menu (Reload / Save as / Print …)
+  // everywhere — it looks out of place in a desktop app. Editable fields get a
+  // themed Cut / Copy / Paste menu instead, via <EditableContextMenu />. An
+  // element can opt back into the native menu with data-allow-context-menu.
+  useEffect(() => {
+    function handleContextMenu(event: MouseEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-allow-context-menu='true']")) {
+        return;
+      }
+      event.preventDefault();
+    }
+
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
     };
   }, []);
 
@@ -170,6 +190,8 @@ function App() {
       />
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      <EditableContextMenu />
 
       <AboutModal
         open={isAboutOpen}

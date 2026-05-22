@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadProjectResponse } from "../types";
 
 // Hoisted mocks so the module factories can reference them safely.
-const { invokeMock, openMock, isTauriMock } = vi.hoisted(() => ({
+const { invokeMock, openMock, isTauriMock, writeTextMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
   openMock: vi.fn(),
   isTauriMock: vi.fn(),
+  writeTextMock: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -16,6 +17,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: openMock,
+}));
+
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
+  writeText: writeTextMock,
 }));
 
 import usePartitionProject from "./usePartitionProject";
@@ -66,6 +71,8 @@ describe("usePartitionProject", () => {
     openMock.mockReset();
     isTauriMock.mockReset();
     isTauriMock.mockReturnValue(true);
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
   });
 
   it("initializes with 2 MB defaults and three partition rows", () => {
@@ -299,17 +306,14 @@ describe("usePartitionProject", () => {
     expect(result.current.toasts).toHaveLength(0);
   });
 
-  it("copies partition information through the clipboard API", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-
+  it("copies partition information through the Tauri clipboard plugin", async () => {
     const { result } = renderHook(() => usePartitionProject());
 
     await act(async () => {
       await result.current.copyPartitionInfo();
     });
 
-    expect(writeText).toHaveBeenCalledWith(result.current.partitionInfoText);
+    expect(writeTextMock).toHaveBeenCalledWith(result.current.partitionInfoText);
     expect(result.current.toasts.some((toast) => toast.kind === "success")).toBe(true);
   });
 
