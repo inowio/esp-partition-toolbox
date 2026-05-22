@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ESP-Partition-Toolbox",
+  "version": "0.1.0",
+  "identifier": "in.inowio.eptoolbox",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1426",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ESP Partition Toolbox",
+        "width": 1280,
+        "height": 720,
+        "maximized": true,
+        "theme": "Dark",
+        "devtools": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "copyright": "Inowio Technologies LLP",
+    "longDescription": "Desktop GUI for managing ESP-IDF partition tables — load a project folder, visually edit and validate the partition layout, and save it back to CSV.",
+    "homepage": "https://inowio.in",
+    "publisher": "Inowio Technologies LLP",
+    "shortDescription": "GUI to manage ESP partitions",
+    "license": "MIT",
+    "category": "Utility",
+    "windows": {
+      "allowDowngrades": true,
+      "certificateThumbprint": null,
+      "digestAlgorithm": null,
+      "nsis": null,
+      "signCommand": null,
+      "timestampUrl": null,
+      "tsp": false,
+      "webviewInstallMode": {
+        "silent": true,
+        "type": "offlineInstaller"
+      },
+      "wix": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/inowio/esp-partition-toolbox/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDQjA5Nzc3RURDQUIxMzEKUldReHNjcnRkNWV3YkgxdW5hV3Y5clVHTjZyVk9NS0JiQlNlanRwVEoyamQyblhxWmxjUjUybUoK"
+    }
+  }
+}

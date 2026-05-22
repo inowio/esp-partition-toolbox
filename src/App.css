@@ -1,0 +1,184 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --breakpoint-fhd: 1800px;
+  --breakpoint-2k: 2300px;
+  --breakpoint-4k: 3500px;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  select {
+    color-scheme: light;
+  }
+
+  .dark select {
+    color-scheme: dark;
+  }
+
+  .dark optgroup {
+    background-color: rgb(15 23 42) !important;
+    color: rgb(226 232 240) !important;
+    font-weight: 600;
+  }
+
+  .dark optgroup option {
+    background-color: rgb(2 6 23) !important;
+    color: rgb(226 232 240) !important;
+    font-weight: 400;
+  }
+
+  .dark option {
+    background-color: rgb(2 6 23);
+    color: rgb(226 232 240);
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-gray-50 text-gray-900 antialiased;
+    font-family: "Segoe UI", "Trebuchet MS", "Avenir Next", system-ui, -apple-system, sans-serif;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  .dark body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  .brand-name {
+    font-family: "Segoe UI", "Trebuchet MS", "Avenir Next", system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  /*
+    Size slider — sized for accessibility (WCAG 2.5.8 target size). The input
+    itself is 24px tall so the whole strip is an easy pointer/touch target,
+    while the visible track stays a slim 6px and the thumb is a clear 20px.
+  */
+  input[type="range"].size-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+  }
+
+  /* ----- Track ----- */
+  input[type="range"].size-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(203 213 225); /* slate-300 */
+  }
+
+  .dark input[type="range"].size-slider::-webkit-slider-runnable-track {
+    background: rgb(71 85 105); /* slate-600 */
+  }
+
+  input[type="range"].size-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(203 213 225);
+  }
+
+  .dark input[type="range"].size-slider::-moz-range-track {
+    background: rgb(71 85 105);
+  }
+
+  /* ----- Thumb ----- */
+  input[type="range"].size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-top: -7px; /* centre the 20px thumb on the 6px track */
+    border-radius: 50%;
+    background: rgb(14 165 233); /* sky-500 */
+    border: 2px solid white;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+
+  input[type="range"].size-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgb(14 165 233);
+    border: 2px solid white;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+
+  .dark input[type="range"].size-slider::-webkit-slider-thumb,
+  .dark input[type="range"].size-slider::-moz-range-thumb {
+    border-color: rgb(30 41 59); /* slate-800 */
+  }
+
+  /* Hover / drag feedback */
+  input[type="range"].size-slider:hover:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.1);
+  }
+
+  input[type="range"].size-slider:active:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.18);
+    background: rgb(2 132 199); /* sky-600 */
+  }
+
+  input[type="range"].size-slider:hover:not(:disabled)::-moz-range-thumb {
+    transform: scale(1.1);
+  }
+
+  input[type="range"].size-slider:active:not(:disabled)::-moz-range-thumb {
+    transform: scale(1.18);
+    background: rgb(2 132 199);
+  }
+
+  /* Keyboard focus ring — restores a visible focus indicator */
+  input[type="range"].size-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.4);
+  }
+
+  input[type="range"].size-slider:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.4);
+  }
+}
