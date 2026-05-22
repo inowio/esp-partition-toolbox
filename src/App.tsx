@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import AboutModal from "./components/AboutModal";
 import AppNavbar from "./components/AppNavbar";
 import CommentsCard from "./components/CommentsCard";
 import CloseProjectModal from "./components/CloseProjectModal";
@@ -10,13 +11,18 @@ import PartitionInformationCard from "./components/PartitionInformationCard";
 import PartitionTableCard from "./components/PartitionTableCard";
 import ProjectHeaderCard from "./components/ProjectHeaderCard";
 import ToastStack from "./components/ToastStack";
+import UpdateDialog from "./components/UpdateDialog";
 import VisualMapCard from "./components/VisualMapCard";
+import { checkForUpdate, installAndRelaunch } from "./api/updater";
+import type { UpdatePrompt } from "./api/updater";
 import usePartitionProject from "./hooks/usePartitionProject";
 
 const FLASH_OPTIONS_MB = [2, 4, 8, 16, 32, 64, 128, 256, 512];
 
 function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [updatePrompt, setUpdatePrompt] = useState<UpdatePrompt | null>(null);
 
   const {
     isBusy,
@@ -58,6 +64,28 @@ function App() {
     document.documentElement.classList.toggle("dark", isDarkTheme);
   }, [isDarkTheme]);
 
+  // Silently check for a newer release on startup. Failures (offline, not in
+  // the Tauri runtime) are swallowed by checkForUpdate and simply skipped.
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const result = await checkForUpdate();
+      if (!cancelled && result.status === "available") {
+        setUpdatePrompt({
+          version: result.version,
+          currentVersion: result.currentVersion,
+          notes: result.notes,
+          update: result.update,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function toggleTheme(): void {
     setIsDarkTheme((currentTheme) => !currentTheme);
   }
@@ -70,6 +98,7 @@ function App() {
         isDarkTheme={isDarkTheme}
         appVersion={appVersion}
         onToggleTheme={toggleTheme}
+        onShowAbout={() => setIsAboutOpen(true)}
       />
 
       <main className="flex w-full flex-col gap-5 px-4 py-5 md:px-8 md:py-7">
@@ -141,6 +170,27 @@ function App() {
       />
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      <AboutModal
+        open={isAboutOpen}
+        appVersion={appVersion}
+        onClose={() => setIsAboutOpen(false)}
+        onUpdateAvailable={(prompt) => {
+          setIsAboutOpen(false);
+          setUpdatePrompt(prompt);
+        }}
+      />
+
+      {updatePrompt ? (
+        <UpdateDialog
+          open
+          version={updatePrompt.version}
+          currentVersion={updatePrompt.currentVersion}
+          notes={updatePrompt.notes}
+          install={(onProgress) => installAndRelaunch(updatePrompt.update, onProgress)}
+          onClose={() => setUpdatePrompt(null)}
+        />
+      ) : null}
     </div>
   );
 }
