@@ -166,4 +166,21 @@ describe("PartitionTableCard", () => {
       screen.getByRole("button", { name: "Fill remaining free space" }),
     ).toBeDisabled();
   });
+
+  it("commits a new size and holds the thumb when the slider is dragged", () => {
+    const onUpdateRow = vi.fn();
+    renderCard(
+      [makeLayoutRow({ id: "r1", offset: 0x10000, size: "64K", sizeBytes: 0x10000 })],
+      { onUpdateRow },
+      { flashBytes: 8 * 1024 * 1024 },
+    );
+
+    const slider = screen.getByRole("slider");
+    fireEvent.change(slider, { target: { value: "250" } });
+
+    expect(onUpdateRow).toHaveBeenCalledTimes(1);
+    expect(onUpdateRow.mock.calls[0][0]).toBe("r1");
+    // The thumb stays where it was dragged instead of snapping back.
+    expect((slider as HTMLInputElement).value).toBe("250");
+  });
 });
