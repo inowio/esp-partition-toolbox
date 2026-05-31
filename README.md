@@ -134,7 +134,7 @@ Released under the [MIT License](LICENSE).
 
 - Issues: <https://github.com/inowio/esp-partition-toolbox/issues>
 - Discussions: <https://github.com/inowio/esp-partition-toolbox/discussions>
-- Email: <support@inowio.in>
+- Email: <inowio@outlook.com>
 
 ---
 
