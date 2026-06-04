@@ -40,6 +40,7 @@ const LOAD_RESPONSE: LoadProjectResponse = {
   partitionFileExists: true,
   sdkconfigUpdated: false,
   partitionOffset: "0x8000",
+  flashSizeMb: null,
 };
 
 function mockInvokeRouting() {
@@ -91,6 +92,32 @@ describe("usePartitionProject", () => {
     act(() => result.current.setFlashSizeMb(16));
     expect(result.current.flashSizeMb).toBe(16);
     expect(result.current.layout.flashBytes).toBe(16 * 1024 * 1024);
+  });
+
+  it("updates the partition table offset", () => {
+    const { result } = renderHook(() => usePartitionProject());
+
+    act(() => result.current.setPartitionOffset("0x9000"));
+    expect(result.current.partitionOffset).toBe("0x9000");
+  });
+
+  it("adopts the flash size detected from sdkconfig on load", async () => {
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command) => {
+      if (command === "load_esp_project") {
+        return Promise.resolve({ ...LOAD_RESPONSE, flashSizeMb: 8 });
+      }
+      return Promise.reject(new Error(`unexpected command: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.flashSizeMb).toBe(2);
+
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    expect(result.current.flashSizeMb).toBe(8);
   });
 
   it("appends an empty row with addRow", () => {

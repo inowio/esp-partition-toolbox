@@ -1,4 +1,5 @@
-import { FiFolder, FiRotateCcw, FiSave, FiXCircle } from "react-icons/fi";
+import { useEffect, useRef, useState } from "react";
+import { FiChevronDown, FiFolder, FiRotateCcw, FiSave, FiXCircle } from "react-icons/fi";
 
 interface ProjectHeaderCardProps {
   flashOptions: number[];
@@ -18,7 +19,27 @@ interface ProjectHeaderCardProps {
   onSave: () => void;
   onClose: () => void;
   onReset: () => void;
+  onPartitionOffsetChange: (value: string) => void;
 }
+
+// An offset is valid when empty (auto-defaults) or a clean hex/decimal number.
+function isValidPartitionOffset(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return /^0x[0-9a-f]+$/.test(normalized) || /^\d+$/.test(normalized);
+}
+
+// Each preset is the partition-*table* offset (CONFIG_PARTITION_TABLE_OFFSET).
+// Increasing it leaves more room for the bootloader at 0x1000–<offset>.
+const PARTITION_OFFSET_PRESETS: { value: string; label: string }[] = [
+  { value: "0x8000", label: "ESP-IDF / Arduino-ESP32 default" },
+  { value: "0x9000", label: "+4 KB bootloader headroom" },
+  { value: "0xA000", label: "+8 KB bootloader headroom" },
+  { value: "0xC000", label: "Larger bootloader" },
+  { value: "0xE000", label: "Large bootloader / security features" },
+  { value: "0x10000", label: "Common preset for secure boot / flash encryption" },
+  { value: "0x20000", label: "Advanced — large reserved bootloader area" },
+];
 
 function getSdkconfigDisplayName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
@@ -44,7 +65,32 @@ export default function ProjectHeaderCard({
   onSave,
   onClose,
   onReset,
+  onPartitionOffsetChange,
 }: ProjectHeaderCardProps) {
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  const presetsRef = useRef<HTMLLabelElement | null>(null);
+
+  // Close the offset-presets popup on outside click or Escape — the same
+  // pattern the editable-field context menu uses.
+  useEffect(() => {
+    if (!presetsOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (presetsRef.current && presetsRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setPresetsOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setPresetsOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [presetsOpen]);
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/90">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -71,18 +117,71 @@ export default function ProjectHeaderCard({
             <p className="text-xs text-slate-500 dark:text-slate-400">{statusMessage}</p>
           )}
 
-          {projectPath && (
-            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+            {projectPath && (
               <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-800/60">
                 <span className="font-semibold">Partition File:</span>{" "}
                 {partitionFilename}
               </span>
-              <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-800/60">
-                <span className="font-semibold">Partition Start:</span>{" "}
-                {partitionOffset}
-              </span>
-            </div>
-          )}
+            )}
+            <label
+              ref={presetsRef}
+              className="relative flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-800/60"
+              title="Partition table offset (CONFIG_PARTITION_TABLE_OFFSET). Most projects use 0x8000; some configs need 0x9000 or higher."
+            >
+              <span className="font-semibold">Partition Start:</span>
+              <input
+                value={partitionOffset}
+                onChange={(event) => onPartitionOffsetChange(event.currentTarget.value)}
+                aria-label="Partition table offset"
+                placeholder="0x8000"
+                className={`w-20 rounded border bg-transparent px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-sky-500 ${
+                  isValidPartitionOffset(partitionOffset)
+                    ? "border-slate-300 dark:border-slate-700"
+                    : "border-rose-400 dark:border-rose-600"
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setPresetsOpen((open) => !open)}
+                aria-label="Show common partition table offsets"
+                aria-expanded={presetsOpen}
+                aria-haspopup="menu"
+                title="Common offsets"
+                className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <FiChevronDown className="h-3 w-3" aria-hidden="true" />
+              </button>
+              {presetsOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-20 mt-1 min-w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                >
+                  {PARTITION_OFFSET_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        onPartitionOffsetChange(preset.value);
+                        setPresetsOpen(false);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <div className="font-mono text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                        {preset.value}
+                      </div>
+                      {preset.label && (
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {preset.label}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+          </div>
         </div>
 
         <div className="flex w-full flex-col gap-2 lg:w-auto lg:items-end">

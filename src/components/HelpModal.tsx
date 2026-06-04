@@ -102,7 +102,7 @@ const DATA_SUBTYPES: Reference[] = [
 const CONCEPTS: { title: string; body: string }[] = [
   {
     title: "The partition table & reserved space",
-    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it.",
+    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it. The partition-table offset (Partition Start) is editable in the Project Header — it pre-fills from CONFIG_PARTITION_TABLE_OFFSET when you load a project. 0x8000 is the ESP-IDF and Arduino-ESP32 default; bumping it (0x9000, 0xA000, …) gives the bootloader more room, and 0x10000 is a common preset when secure boot or flash encryption is enabled.",
   },
   {
     title: "Offset & alignment",
@@ -118,7 +118,7 @@ const CONCEPTS: { title: string; body: string }[] = [
   },
   {
     title: "Flash size",
-    body: "Set Flash Size to match your module's flash chip. Allocating more than the chip actually has is the most common mistake — the validation panel will catch it.",
+    body: "Set Flash Size to match your module's flash chip — when you load a project, the tool detects it from CONFIG_ESPTOOLPY_FLASHSIZE automatically. Allocating more than the chip actually has is the most common mistake — the validation panel will catch it.",
   },
   {
     title: "Validation before flashing",

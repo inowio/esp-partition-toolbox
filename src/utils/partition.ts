@@ -333,6 +333,31 @@ export function calculateLayout(
 
   let cursor = partitionStartOffset;
 
+  // Surface partition-table offset problems explicitly so a typo in the
+  // Partition Start field doesn't get silently swallowed by the fallback.
+  if (typeof partitionOffset === "string") {
+    const raw = partitionOffset.trim();
+    if (raw) {
+      const parsed = parseNumericValue(raw);
+      if (parsed == null) {
+        errors.push({
+          message: `Invalid partition table offset "${raw}" — using the default ${formatHex(DEFAULT_PARTITION_START_OFFSET)} instead.`,
+          severity: "blocking",
+        });
+      } else if (parsed < 0) {
+        errors.push({
+          message: `Partition table offset cannot be negative — using the default ${formatHex(DEFAULT_PARTITION_START_OFFSET)} instead.`,
+          severity: "blocking",
+        });
+      } else if (parsed % SECTOR_SIZE !== 0) {
+        errors.push({
+          message: `Partition table offset ${formatHex(parsed)} is not 4KB aligned — it will be rounded up.`,
+          severity: "warning",
+        });
+      }
+    }
+  }
+
   if (partitionStartOffset >= flashBytes) {
     errors.push({ message: "Partition start offset is outside the selected flash size.", severity: "blocking" });
   }

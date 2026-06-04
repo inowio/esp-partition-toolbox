@@ -23,6 +23,7 @@ interface ProjectSnapshot {
   rows: PartitionDraftRow[];
   flashSizeMb: number;
   partitionFilename: string;
+  partitionOffset: string;
   sdkconfigFile: string;
 }
 
@@ -109,6 +110,7 @@ export interface PartitionProjectActions {
   setRowPendingDelete: (row: PartitionDraftRow | null) => void;
   setSdkconfigFile: (value: string) => void;
   setSyncSdkconfig: (value: boolean) => void;
+  setPartitionOffset: (value: string) => void;
   loadProject: () => Promise<void>;
   saveProject: () => Promise<void>;
   closeProject: () => void;
@@ -169,6 +171,10 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
 
     if (partitionFilename !== snapshot.partitionFilename) {
+      return true;
+    }
+
+    if (partitionOffset !== snapshot.partitionOffset) {
       return true;
     }
 
@@ -263,8 +269,11 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }
 
   function hydrateProjectState(response: LoadProjectResponse): void {
-    const parsed = parsePartitionCsv(response.partitionContent, flashSizeMb);
-    const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(flashSizeMb);
+    // Prefer the flash size detected from sdkconfig; fall back to the value
+    // already in the UI when the project doesn't pin one.
+    const effectiveFlashSizeMb = response.flashSizeMb ?? flashSizeMb;
+    const parsed = parsePartitionCsv(response.partitionContent, effectiveFlashSizeMb);
+    const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(effectiveFlashSizeMb);
 
     setProjectPath(response.projectPath);
     setSdkconfigFile(response.sdkconfigFile);
@@ -274,12 +283,16 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setComments(parsed.comments);
     setRows(nextRows);
     setRuntimeErrors(parsed.errors.length > 0 ? parsed.errors : []);
+    if (response.flashSizeMb != null) {
+      setFlashSizeMb(response.flashSizeMb);
+    }
 
     setSnapshot({
       comments: parsed.comments,
       rows: cloneRows(nextRows),
-      flashSizeMb,
+      flashSizeMb: effectiveFlashSizeMb,
       partitionFilename: response.partitionFilename,
+      partitionOffset: response.partitionOffset,
       sdkconfigFile: response.sdkconfigFile,
     });
     setCloseConfirm({ open: false });
@@ -398,6 +411,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setRows(cloneRows(snapshot.rows));
     setFlashSizeMb(snapshot.flashSizeMb);
     setPartitionFilename(snapshot.partitionFilename);
+    setPartitionOffset(snapshot.partitionOffset);
     setSdkconfigFile(snapshot.sdkconfigFile);
     setRuntimeErrors([]);
     setStatusMessage(
@@ -438,6 +452,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
         rows: cloneRows(rows),
         flashSizeMb,
         partitionFilename,
+        partitionOffset,
         sdkconfigFile,
       });
       setCloseConfirm({ open: false });
@@ -510,6 +525,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     dismissToast,
     copyPartitionInfo,
     copyPartitionCsv,
+    setPartitionOffset,
   };
 }
 
