@@ -52,6 +52,8 @@ export interface LoadProjectResponse {
   partitionFileExists: boolean;
   sdkconfigUpdated: boolean;
   partitionOffset: string;
+  /** Detected from `CONFIG_ESPTOOLPY_FLASHSIZE`; null when not present. */
+  flashSizeMb: number | null;
 }
 
 export interface SaveProjectResponse {

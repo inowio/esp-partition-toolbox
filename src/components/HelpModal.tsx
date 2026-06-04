@@ -18,7 +18,7 @@ const TABS: { id: TabId; label: string }[] = [
 const STEPS: { title: string; body: string }[] = [
   {
     title: "1. Load your ESP-IDF project",
-    body: "Click Load Project and pick the project folder — the one containing CMakeLists.txt and an sdkconfig.defaults file. The tool reads your existing partition CSV (or generates a sensible default) and detects the partition table offset.",
+    body: "Click Load Project and pick the project folder — the one containing CMakeLists.txt and an sdkconfig.defaults file. The tool reads your existing partition CSV (or generates a sensible default) and pre-fills the partition table offset and flash size from sdkconfig.",
   },
   {
     title: "2. Set the flash size",
@@ -34,7 +34,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "5. Watch the validation panel",
-    body: "The Validation card flags overlaps, misaligned offsets, partitions past the flash boundary, duplicate names, and missing required partitions. Clear every error before flashing the device.",
+    body: "The Validation card flags overlaps, misaligned or out-of-range offsets (including the Partition Start value), partitions past the flash boundary, duplicate names, illegal flag combinations, and other ESP-IDF partition rules. Clear every error before flashing the device.",
   },
   {
     title: "6. Save or copy the result",
@@ -102,7 +102,7 @@ const DATA_SUBTYPES: Reference[] = [
 const CONCEPTS: { title: string; body: string }[] = [
   {
     title: "The partition table & reserved space",
-    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it.",
+    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it. The partition-table offset (Partition Start) is editable in the Project Header — it pre-fills from CONFIG_PARTITION_TABLE_OFFSET when you load a project. 0x8000 is the ESP-IDF and Arduino-ESP32 default; bumping it (0x9000, 0xA000, …) gives the bootloader more room, and 0x10000 is a common preset when secure boot or flash encryption is enabled.",
   },
   {
     title: "Offset & alignment",
@@ -118,11 +118,11 @@ const CONCEPTS: { title: string; body: string }[] = [
   },
   {
     title: "Flash size",
-    body: "Set Flash Size to match your module's flash chip. Allocating more than the chip actually has is the most common mistake — the validation panel will catch it.",
+    body: "Set Flash Size to match your module's flash chip — when you load a project, the tool detects it from CONFIG_ESPTOOLPY_FLASHSIZE automatically. Allocating more than the chip actually has is the most common mistake — the validation panel will catch it.",
   },
   {
     title: "Validation before flashing",
-    body: "A green validation panel means the layout is safe to build. Errors flag overlaps, bad alignment, partitions past the end of flash, duplicate names, or a missing nvs/app partition. Fix them all first.",
+    body: "A green validation panel means the layout is safe to build. Errors flag overlaps, bad alignment (including the Partition Start value), partitions past the end of flash, duplicate names, illegal flag combinations, and other ESP-IDF partition rules. Fix them all first.",
   },
 ];
 

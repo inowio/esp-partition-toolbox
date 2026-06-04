@@ -19,6 +19,9 @@ struct LoadProjectResponse {
     partition_file_exists: bool,
     sdkconfig_updated: bool,
     partition_offset: String,
+    /// Detected from `CONFIG_ESPTOOLPY_FLASHSIZE` in sdkconfig.defaults — `None`
+    /// when the key is absent or unparseable, leaving the UI selection alone.
+    flash_size_mb: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +62,13 @@ fn load_esp_project(project_path: String, flash_size_mb: u32, sync_sdkconfig: bo
     let selection = select_sdkconfig_for_load(&project_dir)?;
     let sdkconfig_result = ensure_partition_sdkconfig(&selection, None, sync_sdkconfig)?;
 
+    let sdkconfig_contents: Vec<String> = sdkconfig_result
+        .sdkconfig_files
+        .iter()
+        .map(|file| fs::read_to_string(file).unwrap_or_default())
+        .collect();
+    let detected_flash_size_mb = extract_flash_size_mb(&sdkconfig_contents);
+
     let partition_file_path = project_dir.join(&sdkconfig_result.partition_filename);
     let partition_file_exists = partition_file_path.exists();
 
@@ -82,6 +92,7 @@ fn load_esp_project(project_path: String, flash_size_mb: u32, sync_sdkconfig: bo
         partition_file_exists,
         sdkconfig_updated: sdkconfig_result.sdkconfig_updated,
         partition_offset: format_hex(sdkconfig_result.partition_offset),
+        flash_size_mb: detected_flash_size_mb,
     })
 }
 
@@ -288,6 +299,23 @@ fn select_sdkconfig_defaults_file(sdkconfig_files: &[PathBuf]) -> Result<PathBuf
         .ok_or_else(|| "No sdkconfig file available to update partition config.".to_string())?;
 
     Ok(parent.join("sdkconfig.defaults"))
+}
+
+fn parse_flash_size_string(value: &str) -> Option<u32> {
+    let trimmed = value.trim().to_ascii_uppercase();
+    let stripped = trimmed.strip_suffix("MB").unwrap_or(trimmed.as_str()).trim();
+    stripped.parse::<u32>().ok().filter(|&v| v > 0)
+}
+
+fn extract_flash_size_mb(contents: &[String]) -> Option<u32> {
+    for content in contents {
+        if let Some(value) = extract_config_string(content, "CONFIG_ESPTOOLPY_FLASHSIZE") {
+            if let Some(size) = parse_flash_size_string(&value) {
+                return Some(size);
+            }
+        }
+    }
+    None
 }
 
 fn extract_config_string(content: &str, key: &str) -> Option<String> {
@@ -984,6 +1012,49 @@ mod tests {
         let sdkconfig = fs::read_to_string(dir.join("sdkconfig.defaults")).expect("read sdkconfig");
         assert!(sdkconfig.contains("# Partition Table"));
         assert!(sdkconfig.contains("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\""));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn parse_flash_size_string_handles_typical_values() {
+        assert_eq!(parse_flash_size_string("8MB"), Some(8));
+        assert_eq!(parse_flash_size_string("16MB"), Some(16));
+        assert_eq!(parse_flash_size_string("4mb"), Some(4));
+        assert_eq!(parse_flash_size_string("  32MB  "), Some(32));
+        assert_eq!(parse_flash_size_string("garbage"), None);
+        assert_eq!(parse_flash_size_string(""), None);
+        assert_eq!(parse_flash_size_string("0MB"), None);
+    }
+
+    #[test]
+    fn extract_flash_size_mb_reads_from_sdkconfig() {
+        let contents = vec![
+            "CONFIG_IDF_TARGET=\"esp32s3\"\n".to_string(),
+            "CONFIG_ESPTOOLPY_FLASHSIZE=\"8MB\"\nCONFIG_ESPTOOLPY_FLASHSIZE_8MB=y\n".to_string(),
+        ];
+        assert_eq!(extract_flash_size_mb(&contents), Some(8));
+    }
+
+    #[test]
+    fn extract_flash_size_mb_returns_none_when_key_missing() {
+        let contents = vec!["CONFIG_IDF_TARGET=\"esp32\"\n".to_string()];
+        assert_eq!(extract_flash_size_mb(&contents), None);
+    }
+
+    #[test]
+    fn load_esp_project_detects_flash_size_from_sdkconfig() {
+        let dir = unique_temp_dir("load_flash_size");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(
+            &dir,
+            "sdkconfig.defaults",
+            "CONFIG_IDF_TARGET=\"esp32s3\"\nCONFIG_ESPTOOLPY_FLASHSIZE=\"16MB\"\n",
+        );
+
+        let response =
+            load_esp_project(dir.to_string_lossy().to_string(), 2, false).expect("load project");
+        assert_eq!(response.flash_size_mb, Some(16));
 
         fs::remove_dir_all(&dir).ok();
     }

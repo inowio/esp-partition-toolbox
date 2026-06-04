@@ -23,6 +23,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     onSave: () => undefined,
     onClose: () => undefined,
     onReset: () => undefined,
+    onPartitionOffsetChange: () => undefined,
     ...overrides,
   };
 }
@@ -53,7 +54,23 @@ describe("ProjectHeaderCard", () => {
     expect(screen.getByText("Partition File:")).toBeInTheDocument();
     expect(screen.getByText("custom.csv")).toBeInTheDocument();
     expect(screen.getByText("Partition Start:")).toBeInTheDocument();
-    expect(screen.getByText("0x9000")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0x9000")).toBeInTheDocument();
+  });
+
+  it("shows an editable Partition Start field even with no project loaded", () => {
+    render(<ProjectHeaderCard {...baseProps({ partitionOffset: "0x8000" })} />);
+    const input = screen.getByLabelText("Partition table offset") as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe("0x8000");
+  });
+
+  it("invokes onPartitionOffsetChange when the offset is edited", () => {
+    const onPartitionOffsetChange = vi.fn();
+    render(<ProjectHeaderCard {...baseProps({ onPartitionOffsetChange })} />);
+    fireEvent.change(screen.getByLabelText("Partition table offset"), {
+      target: { value: "0x9000" },
+    });
+    expect(onPartitionOffsetChange).toHaveBeenCalledWith("0x9000");
   });
 
   it("invokes onFlashSizeChange with a numeric value", () => {

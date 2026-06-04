@@ -49,6 +49,7 @@ function App() {
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,
+    setPartitionOffset,
     setComments,
     setRowPendingDelete,
     loadProject,
@@ -145,6 +146,7 @@ function App() {
           onSave={saveProject}
           onClose={closeProject}
           onReset={resetToSnapshot}
+          onPartitionOffsetChange={setPartitionOffset}
         />
 
         <KpiCards

@@ -1,14 +1,14 @@
 # Testing
 
 ## Coverage Summary
-- **Frontend (Vitest + React Testing Library + jsdom)** — 349 tests
+- **Frontend (Vitest + React Testing Library + jsdom)** — 353 tests
   - Utilities: size parsing/formatting, CSV parse/serialize, layout calculation, pinned offsets, ESP-IDF partition rules (flags, custom types), full round-trip (`utils/partition.ts`).
   - Constants: partition type/subtype option resolution (`constants/partitionOptions.ts`).
   - Components: every presentational component — navbar, KPI cards, error card, visual map, partition table, the modal dialogs (delete, close, about, help, update), the preview / sdkconfig-entry / comments cards, toasts, project header, and the editable-field context menu.
   - State hook: `usePartitionProject` — load/save/close/reset flows, validation gating, snapshots, toasts (Tauri APIs mocked).
   - Updater: `api/updater.ts` — check / install-and-relaunch flows with the Tauri updater & process plugins mocked.
   - Release tooling: `scripts/bump-version.mjs` — semver parsing/compare, version rewriting across the manifests, changelog reshaping, and git-state guards (against a temporary repo).
-- **Backend (Rust unit tests)** — 31 tests
+- **Backend (Rust unit tests)** — 35 tests
   - Pure helpers: numeric alignment, hex formatting, sdkconfig key extraction, partition-block normalization.
   - Filesystem helpers: project-root validation, sdkconfig discovery/selection, partition-block writing.
   - Command integration: `load_esp_project` and `save_project_state` against temporary project folders.
