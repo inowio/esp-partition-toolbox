@@ -18,7 +18,7 @@ const TABS: { id: TabId; label: string }[] = [
 const STEPS: { title: string; body: string }[] = [
   {
     title: "1. Load your ESP-IDF project",
-    body: "Click Load Project and pick the project folder — the one containing CMakeLists.txt and an sdkconfig.defaults file. The tool reads your existing partition CSV (or generates a sensible default) and detects the partition table offset.",
+    body: "Click Load Project and pick the project folder — the one containing CMakeLists.txt and an sdkconfig.defaults file. The tool reads your existing partition CSV (or generates a sensible default) and pre-fills the partition table offset and flash size from sdkconfig.",
   },
   {
     title: "2. Set the flash size",
@@ -34,7 +34,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "5. Watch the validation panel",
-    body: "The Validation card flags overlaps, misaligned offsets, partitions past the flash boundary, duplicate names, and missing required partitions. Clear every error before flashing the device.",
+    body: "The Validation card flags overlaps, misaligned or out-of-range offsets (including the Partition Start value), partitions past the flash boundary, duplicate names, illegal flag combinations, and other ESP-IDF partition rules. Clear every error before flashing the device.",
   },
   {
     title: "6. Save or copy the result",
@@ -122,7 +122,7 @@ const CONCEPTS: { title: string; body: string }[] = [
   },
   {
     title: "Validation before flashing",
-    body: "A green validation panel means the layout is safe to build. Errors flag overlaps, bad alignment, partitions past the end of flash, duplicate names, or a missing nvs/app partition. Fix them all first.",
+    body: "A green validation panel means the layout is safe to build. Errors flag overlaps, bad alignment (including the Partition Start value), partitions past the end of flash, duplicate names, illegal flag combinations, and other ESP-IDF partition rules. Fix them all first.",
   },
 ];
 
