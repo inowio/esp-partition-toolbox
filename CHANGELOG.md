@@ -6,19 +6,31 @@ All notable changes to this project are tracked here following [Keep a Changelog
 
 _No changes yet._
 
+## [0.2.0] - 2026-06-04
+
+### Added
+- Editable **Partition Start** offset in the Project Header — freeform input
+  with a built-in dropdown of common values (`0x8000` default, `0x9000`/
+  `0xA000` for extra bootloader headroom, `0xC000`/`0xE000` for larger
+  bootloaders, `0x10000` for secure boot / flash encryption, `0x20000` for
+  advanced custom layouts), inline validity styling, and explicit validation-
+  panel errors for unparseable or misaligned values.
+- Flash-size auto-detection: project loading reads `CONFIG_ESPTOOLPY_FLASHSIZE`
+  from sdkconfig and pre-selects the matching value in the Flash Size
+  dropdown.
+
+### Changed
+- Help & Reference: Getting Started (Step 1 + Step 5) and Key Concepts updated
+  to reflect the new partition-offset presets, flash-size auto-detection, and
+  validation messages.
+
 ## [0.1.0] - 2026-05-22
 
 ### Added
 - Initial public release of ESP Partition Toolbox.
 - Project loading: auto-discovers `sdkconfig.defaults` and
-  `sdkconfig.defaults.*` variants and applies `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`,
-  `CONFIG_PARTITION_TABLE_OFFSET`, and `CONFIG_ESPTOOLPY_FLASHSIZE` to the UI.
-- Editable partition table offset in the Project Header — freeform input with
-  a built-in dropdown of common values (`0x8000` default, `0x9000`/`0xA000`
-  for extra bootloader headroom, `0xC000`/`0xE000` for larger bootloaders,
-  `0x10000` for secure boot / flash encryption, `0x20000` for advanced custom
-  layouts), inline validity styling, and explicit panel errors for
-  unparseable or misaligned values.
+  `sdkconfig.defaults.*` variants and honors an existing
+  `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`.
 - Visual partition map: a proportional, color-coded bar of flash usage with a
   legend that names the reserved, partition, and free regions.
 - Inline partition editing: name, type/subtype dropdowns, size (hex / K / M,
