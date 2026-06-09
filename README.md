@@ -140,7 +140,7 @@ Released under the [MIT License](LICENSE).
 
 - Issues: <https://github.com/inowio/esp-partition-toolbox/issues>
 - Discussions: <https://github.com/inowio/esp-partition-toolbox/discussions>
-- Email: <inowio@outlook.com>
+- Email: <info@inowio.in>
 
 ---
 
