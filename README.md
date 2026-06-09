@@ -8,6 +8,12 @@ A desktop GUI for managing ESP-IDF partition tables. Load an ESP-IDF project fol
 
 ![ESP Partition Toolbox](public/logo.svg)
 
+## Screenshots
+
+| | | |
+| --- | --- | --- |
+| ![ESP Partition Toolbox screenshot 1](public/screenshots/esp-partition-toolbox-1.jpg) | ![ESP Partition Toolbox screenshot 2](public/screenshots/esp-partition-toolbox-2.jpg) | ![ESP Partition Toolbox screenshot 3](public/screenshots/esp-partition-toolbox-3.jpg) |
+
 ## Highlights
 
 - **Project loading** — auto-discovers `sdkconfig.defaults` / `sdkconfig.defaults.*` and honors an existing `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`
