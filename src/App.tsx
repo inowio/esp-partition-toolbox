@@ -12,7 +12,8 @@ import KpiCards from "./components/KpiCards";
 import PartitionInformationCard from "./components/PartitionInformationCard";
 import PartitionPreviewCard from "./components/PartitionPreviewCard";
 import PartitionTableCard from "./components/PartitionTableCard";
-import ProjectHeaderCard from "./components/ProjectHeaderCard";
+import ProjectActionsCard from "./components/ProjectActionsCard";
+import TargetOutputCard from "./components/TargetOutputCard";
 import ToastStack from "./components/ToastStack";
 import UpdateDialog from "./components/UpdateDialog";
 import VisualMapCard from "./components/VisualMapCard";
@@ -31,6 +32,8 @@ function App() {
   const {
     isBusy,
     projectPath,
+    platform,
+    mcu,
     sdkconfigFile,
     sdkconfigFiles,
     syncSdkconfig,
@@ -46,6 +49,8 @@ function App() {
     toasts,
     partitionInfoText,
     partitionCsvText,
+    setPlatform,
+    setMcu,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,
@@ -128,31 +133,46 @@ function App() {
       />
 
       <main className="flex w-full flex-col gap-5 px-4 py-5 md:px-8 md:py-7">
-        <ProjectHeaderCard
-          flashOptions={FLASH_OPTIONS_MB}
-          flashSizeMb={flashSizeMb}
+        <ProjectActionsCard
           projectPath={projectPath}
-          sdkconfigFile={sdkconfigFile}
-          sdkconfigFiles={sdkconfigFiles}
-          syncSdkconfig={syncSdkconfig}
-          partitionFilename={partitionFilename}
-          partitionOffset={partitionOffset}
+          platform={platform}
           statusMessage={statusMessage}
           isBusy={isBusy}
-          onFlashSizeChange={setFlashSizeMb}
-          onSdkconfigFileChange={setSdkconfigFile}
-          onSyncSdkconfigChange={setSyncSdkconfig}
-          onLoad={loadProject}
+          onLoad={() => void loadProject()}
           onSave={saveProject}
           onClose={closeProject}
           onReset={resetToSnapshot}
-          onPartitionOffsetChange={setPartitionOffset}
+        />
+
+        <TargetOutputCard
+          platform={platform}
+          mcu={mcu}
+          flashSizeMb={flashSizeMb}
+          flashOptions={FLASH_OPTIONS_MB}
+          partitionFilename={partitionFilename}
+          projectPath={projectPath}
+          syncSdkconfig={syncSdkconfig}
+          sdkconfigFile={sdkconfigFile}
+          sdkconfigFiles={sdkconfigFiles}
+          isBusy={isBusy}
+          onPlatformChange={(p) => {
+            if (projectPath) {
+              void loadProject(p);
+            } else {
+              setPlatform(p);
+            }
+          }}
+          onMcuChange={setMcu}
+          onFlashSizeChange={setFlashSizeMb}
+          onSyncSdkconfigChange={setSyncSdkconfig}
+          onSdkconfigFileChange={setSdkconfigFile}
         />
 
         <KpiCards
           flashBytes={layout.flashBytes}
           allocated={layout.allocated}
           free={layout.free}
+          usableBytes={layout.usable}
           reservedBytes={layout.reservedBytes}
         />
 
@@ -167,6 +187,8 @@ function App() {
         <PartitionTableCard
           rows={layout.rows}
           flashBytes={layout.flashBytes}
+          partitionOffset={partitionOffset}
+          onPartitionOffsetChange={setPartitionOffset}
           onAddRow={addRow}
           onUpdateRow={updateRow}
           onRequestDelete={setRowPendingDelete}

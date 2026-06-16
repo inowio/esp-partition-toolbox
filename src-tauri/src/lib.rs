@@ -62,20 +62,41 @@ struct SdkconfigEnsureResult {
 }
 
 #[tauri::command]
-fn load_project(project_path: String, flash_size_mb: u32) -> Result<LoadProjectResponse, String> {
+fn load_project(
+    project_path: String,
+    flash_size_mb: u32,
+    force_platform: Option<String>,
+) -> Result<LoadProjectResponse, String> {
     let project_dir = PathBuf::from(&project_path);
     if !project_dir.exists() || !project_dir.is_dir() {
         return Err("Selected folder does not exist or is not a directory.".to_string());
     }
 
-    let detection = crate::platform::detect_platform(&project_dir)?;
+    let detection = match force_platform.as_deref() {
+        Some("esp-idf") => crate::platform::PlatformDetection {
+            platform: crate::platform::Platform::EspIdf,
+            confidence: "forced",
+            markers: vec!["user-selected".to_string()],
+        },
+        Some("platformio") => crate::platform::PlatformDetection {
+            platform: crate::platform::Platform::PlatformIo,
+            confidence: "forced",
+            markers: vec!["user-selected".to_string()],
+        },
+        Some("arduino") => crate::platform::PlatformDetection {
+            platform: crate::platform::Platform::Arduino,
+            confidence: "forced",
+            markers: vec!["user-selected".to_string()],
+        },
+        Some(other) => return Err(format!("Unknown platform: {other}")),
+        None => crate::platform::detect_platform(&project_dir)?,
+    };
+
     let adapter = crate::platform::adapter_for(detection.platform)?;
     let ctx = adapter.read_context(&project_dir, flash_size_mb)?;
 
     Ok(LoadProjectResponse {
         platform: ctx.platform.as_str().to_string(),
-        // Report the actual detection result, not the adapter's placeholder, so the
-        // UI's platformConfidence/markers reflect how the project was classified.
         platform_confidence: detection.confidence.to_string(),
         markers: detection.markers,
         project_path: project_dir.to_string_lossy().to_string(),
@@ -1041,7 +1062,7 @@ mod tests {
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
         write_file(&dir, "partitions.csv", "nvs, data, nvs, 0x10000, 16K,\n");
 
-        let response = load_project(dir.to_string_lossy().to_string(), 4)
+        let response = load_project(dir.to_string_lossy().to_string(), 4, None)
             .expect("load project");
 
         assert_eq!(response.platform, "esp-idf");
@@ -1060,7 +1081,7 @@ mod tests {
         fs::create_dir_all(dir.join("main")).expect("create main dir");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
 
-        let response = load_project(dir.to_string_lossy().to_string(), 4)
+        let response = load_project(dir.to_string_lossy().to_string(), 4, None)
             .expect("load project");
 
         assert_eq!(response.platform, "esp-idf");
@@ -1075,7 +1096,7 @@ mod tests {
         let dir = unique_temp_dir("load_invalid");
         write_file(&dir, "README.md", "hi");
 
-        let result = load_project(dir.to_string_lossy().to_string(), 4);
+        let result = load_project(dir.to_string_lossy().to_string(), 4, None);
         assert!(result.is_err());
 
         fs::remove_dir_all(&dir).ok();
@@ -1182,7 +1203,7 @@ mod tests {
         );
 
         let response =
-            load_project(dir.to_string_lossy().to_string(), 2).expect("load project");
+            load_project(dir.to_string_lossy().to_string(), 2, None).expect("load project");
         assert_eq!(response.flash_size_mb, Some(16));
         assert_eq!(response.mcu.as_deref(), Some("esp32s3"));
 
@@ -1332,6 +1353,30 @@ mod tests {
 
         let written = fs::read_to_string(dir.join("sdkconfig.defaults")).unwrap();
         assert!(written.contains("CONFIG_PARTITION_TABLE_OFFSET=0x9000"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_project_honors_force_platform_error_for_unsupported() {
+        let dir = unique_temp_dir("force_pio");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+        // Forcing platformio on an ESP-IDF folder must return the explicit
+        // "not available yet" error, not silently fall back to ESP-IDF.
+        let result = load_project(dir.to_string_lossy().to_string(), 4, Some("platformio".to_string()));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("PlatformIO"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_project_auto_detects_when_force_platform_is_none() {
+        let dir = unique_temp_dir("force_none");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        std::fs::create_dir_all(dir.join("main")).unwrap();
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+        let response = load_project(dir.to_string_lossy().to_string(), 4, None).expect("load");
+        assert_eq!(response.platform, "esp-idf");
         fs::remove_dir_all(&dir).ok();
     }
 }

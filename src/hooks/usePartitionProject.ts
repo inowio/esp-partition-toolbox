@@ -18,6 +18,7 @@ import {
   parsePartitionCsv,
   serializePartitionCsvForFlash,
 } from "../utils/partition";
+import { buildConfigPreview } from "../utils/configPreview";
 
 interface ProjectSnapshot {
   comments: string;
@@ -33,23 +34,6 @@ interface CloseConfirmState {
 }
 
 const TOAST_TIMEOUT_MS = 5000;
-
-function buildPartitionInfoBlock(partitionFilename: string, partitionOffset: string): string {
-  const safeFilename = (partitionFilename.trim() || "partitions.csv").replace(/"/g, '\\"');
-  const safeOffset = partitionOffset.trim() || "0x8000";
-
-  return [
-    "#",
-    "# Partition Table",
-    "#",
-    "CONFIG_PARTITION_TABLE_CUSTOM=y",
-    `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"${safeFilename}\"`,
-    `CONFIG_PARTITION_TABLE_FILENAME=\"${safeFilename}\"`,
-    `CONFIG_PARTITION_TABLE_OFFSET=${safeOffset}`,
-    "CONFIG_PARTITION_TABLE_MD5=y",
-    "# end of Partition Table",
-  ].join("\n");
-}
 
 function fallbackCopyText(text: string): boolean {
   if (typeof document === "undefined") {
@@ -109,13 +93,14 @@ export interface PartitionProjectState {
 
 export interface PartitionProjectActions {
   setPlatform: (value: Platform) => void;
+  setMcu: (value: string | null) => void;
   setFlashSizeMb: (value: number) => void;
   setComments: (value: string) => void;
   setRowPendingDelete: (row: PartitionDraftRow | null) => void;
   setSdkconfigFile: (value: string) => void;
   setSyncSdkconfig: (value: boolean) => void;
   setPartitionOffset: (value: string) => void;
-  loadProject: () => Promise<void>;
+  loadProject: (forcePlatform?: Platform) => Promise<void>;
   saveProject: () => Promise<void>;
   closeProject: () => void;
   confirmCloseProject: () => void;
@@ -214,8 +199,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }, [comments, flashSizeMb, partitionFilename, partitionOffset, projectPath, rows, sdkconfigFile, snapshot]);
 
   const partitionInfoText = useMemo(
-    () => buildPartitionInfoBlock(partitionFilename, partitionOffset),
-    [partitionFilename, partitionOffset],
+    () => buildConfigPreview(platform, { partitionFilename, partitionOffset }),
+    [platform, partitionFilename, partitionOffset],
   );
 
   // The exact CSV that saveProject would write — kept in sync for the preview.
@@ -322,7 +307,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
   }
 
-  async function loadProject(): Promise<void> {
+  async function loadProject(forcePlatform?: Platform): Promise<void> {
     setRuntimeErrors([]);
 
     if (!isTauri()) {
@@ -355,6 +340,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
       const response = await invoke<LoadProjectResponse>("load_project", {
         projectPath: selected,
         flashSizeMb,
+        forcePlatform: forcePlatform ?? null,
       });
 
       hydrateProjectState(response);
@@ -531,6 +517,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     partitionInfoText,
     partitionCsvText,
     setPlatform,
+    setMcu,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,

@@ -397,4 +397,22 @@ describe("usePartitionProject", () => {
     expect(result.current.partitionInfoText).toContain('CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"');
     expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_OFFSET=0x8000");
   });
+
+  it("passes forcePlatform to load_project when provided", async () => {
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") return Promise.resolve({ ...LOAD_RESPONSE });
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => { await result.current.loadProject("platformio"); });
+    expect(invokeMock).toHaveBeenCalledWith("load_project", expect.objectContaining({ forcePlatform: "platformio" }));
+  });
+
+  it("renders a platform-specific config preview", () => {
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_CUSTOM=y");
+    act(() => result.current.setPlatform("platformio"));
+    expect(result.current.partitionInfoText).toContain("board_build.partitions");
+  });
 });

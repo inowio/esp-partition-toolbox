@@ -8,6 +8,7 @@ describe("PartitionInformationCard", () => {
   it("renders the partition info inside a read-only textarea", () => {
     render(<PartitionInformationCard partitionInfo={SAMPLE_INFO} onCopy={() => undefined} isBusy={false} />);
 
+    expect(screen.getByRole("heading", { name: "Config Preview" })).toBeInTheDocument();
     const textarea = screen.getByRole("textbox");
     expect(textarea).toHaveValue(SAMPLE_INFO);
     expect(textarea).toHaveAttribute("readonly");

@@ -29,6 +29,8 @@ function renderCard(
     onAddRow: () => void;
     onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
     onRequestDelete: (row: PartitionDraftRow) => void;
+    partitionOffset: string;
+    onPartitionOffsetChange: (value: string) => void;
   }> = {},
   options: { flashBytes?: number } = {},
 ) {
@@ -36,6 +38,8 @@ function renderCard(
     <PartitionTableCard
       rows={rows}
       flashBytes={options.flashBytes ?? DEFAULT_FLASH_BYTES}
+      partitionOffset={handlers.partitionOffset ?? "0x8000"}
+      onPartitionOffsetChange={handlers.onPartitionOffsetChange ?? (() => undefined)}
       onAddRow={handlers.onAddRow ?? (() => undefined)}
       onUpdateRow={handlers.onUpdateRow ?? (() => undefined)}
       onRequestDelete={handlers.onRequestDelete ?? (() => undefined)}
@@ -70,8 +74,7 @@ describe("PartitionTableCard", () => {
     const onUpdateRow = vi.fn();
     renderCard([makeLayoutRow({ id: "r1", name: "nvs" })], { onUpdateRow });
 
-    // The Name field is the only free-text input in a row.
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "storage" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Partition name" }), { target: { value: "storage" } });
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { name: "storage" });
   });
 
@@ -79,7 +82,7 @@ describe("PartitionTableCard", () => {
     const onUpdateRow = vi.fn();
     renderCard([makeLayoutRow({ id: "r1", name: "nvs" })], { onUpdateRow });
 
-    fireEvent.blur(screen.getByRole("textbox"), { target: { value: "  storage  " } });
+    fireEvent.blur(screen.getByRole("textbox", { name: "Partition name" }), { target: { value: "  storage  " } });
     expect(onUpdateRow).toHaveBeenCalledWith("r1", { name: "storage" });
   });
 
@@ -273,5 +276,17 @@ describe("PartitionTableCard", () => {
     renderCard([makeLayoutRow({ id: "r1", type: "0x40", subtype: "0x00" })]);
     expect(screen.getByDisplayValue("0x40")).toBeInTheDocument();
     expect(screen.getByDisplayValue("0x00")).toBeInTheDocument();
+  });
+
+  it("renders the Partition Start control", () => {
+    renderCard([makeLayoutRow({})], { partitionOffset: "0x8000" });
+    expect(screen.getByLabelText("Partition table offset")).toHaveValue("0x8000");
+  });
+
+  it("invokes onPartitionOffsetChange when edited", () => {
+    const onPartitionOffsetChange = vi.fn();
+    renderCard([makeLayoutRow({})], { partitionOffset: "0x8000", onPartitionOffsetChange });
+    fireEvent.change(screen.getByLabelText("Partition table offset"), { target: { value: "0x9000" } });
+    expect(onPartitionOffsetChange).toHaveBeenCalledWith("0x9000");
   });
 });
