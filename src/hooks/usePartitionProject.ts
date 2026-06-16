@@ -19,6 +19,7 @@ import {
   serializePartitionCsvForFlash,
 } from "../utils/partition";
 import { buildConfigPreview } from "../utils/configPreview";
+import { platformLabel } from "../constants/platformOptions";
 
 interface ProjectSnapshot {
   comments: string;
@@ -133,7 +134,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   const [rows, setRows] = useState<PartitionDraftRow[]>(initialRows);
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
 
-  const [statusMessage, setStatusMessage] = useState("Select an ESP-IDF project folder to begin.");
+  const [statusMessage, setStatusMessage] = useState("Select a project folder to begin.");
   const [runtimeErrors, setRuntimeErrors] = useState<ValidationError[]>([]);
   const [rowPendingDelete, setRowPendingDelete] = useState<PartitionDraftRow | null>(null);
   const [closeConfirm, setCloseConfirm] = useState<CloseConfirmState>({ open: false });
@@ -323,7 +324,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
       selected = await open({
         directory: true,
         multiple: false,
-        title: "Select ESP-IDF Project Folder",
+        title: `Select ${platformLabel(platform)} project folder`,
       });
     } catch (error) {
       setRuntimeErrors([{ message: `Failed to open folder dialog: ${String(error)}`, severity: "blocking" }]);

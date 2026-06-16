@@ -351,7 +351,7 @@ export function calculateLayout(
         });
       } else if (parsed % SECTOR_SIZE !== 0) {
         errors.push({
-          message: `Partition table offset ${formatHex(parsed)} is not 4KB aligned — it will be rounded up.`,
+          message: `Partition table offset ${formatHex(parsed)} is not 4KB aligned — it will be up.`,
           severity: "warning",
         });
       }
@@ -408,7 +408,7 @@ export function calculateLayout(
     const normalizedSize = alignUp(parsedSize, SECTOR_SIZE);
     if (normalizedSize !== parsedSize) {
       errors.push({
-        message: `Size for partition ${row.name || "<unnamed>"} is not 4KB aligned. Rounded to ${formatHex(
+        message: `Size for partition ${row.name || "<unnamed>"} is not 4KB aligned. to ${formatHex(
           normalizedSize,
         )}.`,
         severity: "warning",

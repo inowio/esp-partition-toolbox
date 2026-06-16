@@ -92,7 +92,7 @@ describe("usePartitionProject", () => {
     expect(result.current.rows).toHaveLength(3);
     expect(result.current.hasSnapshot).toBe(false);
     expect(result.current.projectPath).toBe("");
-    expect(result.current.statusMessage).toMatch(/Select an ESP-IDF project folder/);
+    expect(result.current.statusMessage).toMatch(/Select a project folder/);
   });
 
   it("updates the flash size", () => {
@@ -414,5 +414,21 @@ describe("usePartitionProject", () => {
     expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_CUSTOM=y");
     act(() => result.current.setPlatform("platformio"));
     expect(result.current.partitionInfoText).toContain("board_build.partitions");
+  });
+
+  it("titles the folder dialog with the selected platform", async () => {
+    openMock.mockResolvedValue(null); // cancel — we only assert the open() args
+    const { result } = renderHook(() => usePartitionProject());
+
+    await act(async () => { await result.current.loadProject(); });
+    expect(openMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Select ESP-IDF project folder" }),
+    );
+
+    act(() => result.current.setPlatform("arduino"));
+    await act(async () => { await result.current.loadProject(); });
+    expect(openMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Select Arduino project folder" }),
+    );
   });
 });
