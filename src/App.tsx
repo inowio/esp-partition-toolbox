@@ -132,7 +132,7 @@ function App() {
         onShowHelp={() => setIsHelpOpen(true)}
       />
 
-      <main className="flex w-full flex-col gap-5 px-4 py-5 md:px-8 md:py-7">
+      <main className="flex w-full flex-col gap-5 px-4 py-4">
         <ProjectActionsCard
           projectPath={projectPath}
           platform={platform}

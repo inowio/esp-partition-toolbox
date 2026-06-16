@@ -514,16 +514,16 @@ export default function PartitionTableCard({
         <div className="flex flex-wrap items-center gap-4">
           <label
             ref={presetsRef}
-            className="relative flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300"
+            className="relative flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800/60 text-sm text-slate-600 dark:text-slate-300"
             title="Partition table offset (CONFIG_PARTITION_TABLE_OFFSET). Most projects use 0x8000; some configs need 0x9000 or higher."
           >
-            <span className="font-semibold">Partition Start:</span>
+            <span className="font-medium">Partition Start</span>
             <input
               value={partitionOffset}
               onChange={(event) => onPartitionOffsetChange(event.currentTarget.value)}
               aria-label="Partition table offset"
               placeholder="0x8000"
-              className={`w-20 rounded border bg-transparent px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-sky-500 ${
+              className={`w-28 rounded border bg-transparent px-2 py-1 font-mono text-sm outline-none focus:border-sky-500 ${
                 isValidPartitionOffset(partitionOffset)
                   ? "border-slate-300 dark:border-slate-700"
                   : "border-rose-400 dark:border-rose-600"
@@ -536,9 +536,9 @@ export default function PartitionTableCard({
               aria-expanded={presetsOpen}
               aria-haspopup="menu"
               title="Common offsets"
-              className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              <FiChevronDown className="h-3 w-3" aria-hidden="true" />
+              <FiChevronDown className="h-4 w-4" aria-hidden="true" />
             </button>
             {presetsOpen && (
               <div
@@ -556,11 +556,11 @@ export default function PartitionTableCard({
                     }}
                     className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    <div className="font-mono text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                    <div className="font-mono text-sm font-semibold text-sky-700 dark:text-sky-300">
                       {preset.value}
                     </div>
                     {preset.label && (
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         {preset.label}
                       </div>
                     )}
