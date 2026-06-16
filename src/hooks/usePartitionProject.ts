@@ -6,6 +6,7 @@ import type {
   LoadProjectResponse,
   PartitionDraftRow,
   PartitionLayoutResult,
+  Platform,
   SaveProjectResponse,
   ToastMessage,
   ValidationError,
@@ -82,6 +83,8 @@ function cloneRows(rows: PartitionDraftRow[]): PartitionDraftRow[] {
 
 export interface PartitionProjectState {
   isBusy: boolean;
+  platform: Platform;
+  mcu: string | null;
   projectPath: string;
   sdkconfigFile: string;
   sdkconfigFiles: string[];
@@ -105,6 +108,7 @@ export interface PartitionProjectState {
 }
 
 export interface PartitionProjectActions {
+  setPlatform: (value: Platform) => void;
   setFlashSizeMb: (value: number) => void;
   setComments: (value: string) => void;
   setRowPendingDelete: (row: PartitionDraftRow | null) => void;
@@ -128,6 +132,8 @@ export interface PartitionProjectActions {
 function usePartitionProject(): PartitionProjectState & PartitionProjectActions {
   const [isBusy, setIsBusy] = useState(false);
 
+  const [platform, setPlatform] = useState<Platform>("esp-idf");
+  const [mcu, setMcu] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState("");
   const [sdkconfigFile, setSdkconfigFile] = useState("");
   const [sdkconfigFiles, setSdkconfigFiles] = useState<string[]>([]);
@@ -205,7 +211,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
 
     return false;
-  }, [comments, flashSizeMb, partitionFilename, projectPath, rows, sdkconfigFile, snapshot]);
+  }, [comments, flashSizeMb, partitionFilename, partitionOffset, projectPath, rows, sdkconfigFile, snapshot]);
 
   const partitionInfoText = useMemo(
     () => buildPartitionInfoBlock(partitionFilename, partitionOffset),
@@ -275,6 +281,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     const parsed = parsePartitionCsv(response.partitionContent, effectiveFlashSizeMb);
     const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(effectiveFlashSizeMb);
 
+    setPlatform(response.platform);
+    setMcu(response.mcu);
     setProjectPath(response.projectPath);
     setSdkconfigFile(response.sdkconfigFile);
     setSdkconfigFiles(response.sdkconfigFiles);
@@ -297,11 +305,11 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     });
     setCloseConfirm({ open: false });
 
-    const updateNotes: string[] = [];
-    if (response.sdkconfigUpdated) {
-      updateNotes.push("sdkconfig partition block was added");
+    if (response.warnings.length > 0) {
+      pushToast(response.warnings.join(" "), "warning");
     }
 
+    const updateNotes: string[] = [];
     if (!response.partitionFileExists) {
       updateNotes.push(`${response.partitionFilename} not found; using in-memory defaults until you save`);
     }
@@ -344,10 +352,9 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
 
     setIsBusy(true);
     try {
-      const response = await invoke<LoadProjectResponse>("load_esp_project", {
+      const response = await invoke<LoadProjectResponse>("load_project", {
         projectPath: selected,
         flashSizeMb,
-        syncSdkconfig,
       });
 
       hydrateProjectState(response);
@@ -362,6 +369,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   function doCloseProject(): void {
     const defaults = defaultRowsForFlashSize(defaultFlash);
 
+    setPlatform("esp-idf");
+    setMcu(null);
     setProjectPath("");
     setSdkconfigFile("");
     setSdkconfigFiles([]);
@@ -437,25 +446,36 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     try {
       const partitionContent = serializePartitionCsvForFlash(comments, layout.rows, flashSizeMb);
 
-      const response = await invoke<SaveProjectResponse>("save_project_state", {
+      const response = await invoke<SaveProjectResponse>("save_project", {
         request: {
+          platform,
           projectPath,
-          sdkconfigFile,
           partitionFilename,
           partitionContent,
-          syncSdkconfig,
+          partitionOffset,
+          applyConfigUpdate: syncSdkconfig,
+          configTargets: sdkconfigFile ? [sdkconfigFile] : [],
         },
       });
 
+      // Snapshot from the rows we actually serialized and wrote, re-parsed from
+      // the exact CSV sent to the backend. This keeps the snapshot in lockstep
+      // with what's on disk so hasUnsavedChanges is false immediately after save.
+      const savedRows = parsePartitionCsv(partitionContent, flashSizeMb).rows;
+      setRows(savedRows);
       setSnapshot({
         comments,
-        rows: cloneRows(rows),
+        rows: cloneRows(savedRows),
         flashSizeMb,
         partitionFilename,
         partitionOffset,
         sdkconfigFile,
       });
       setCloseConfirm({ open: false });
+
+      if (response.warnings.length > 0) {
+        pushToast(response.warnings.join(" "), "warning");
+      }
 
       pushToast(`Saved to ${response.partitionFilePath}`, "success");
       setStatusMessage("");
@@ -488,6 +508,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
 
   return {
     isBusy,
+    platform,
+    mcu,
     projectPath,
     sdkconfigFile,
     sdkconfigFiles,
@@ -508,6 +530,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     toasts,
     partitionInfoText,
     partitionCsvText,
+    setPlatform,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,

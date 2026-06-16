@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub(crate) mod platform;
+
 const DEFAULT_PARTITION_FILENAME: &str = "partitions.csv";
 const DEFAULT_PARTITION_OFFSET: u64 = 0x8000;
 const DEFAULT_PARTITION_START: u64 = 0x10000;
@@ -10,28 +12,34 @@ const SECTOR_SIZE: u64 = 0x1000;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LoadProjectResponse {
+    platform: String,
+    platform_confidence: String,
+    markers: Vec<String>,
     project_path: String,
+    mcu: Option<String>,
     sdkconfig_file: String,
     sdkconfig_files: Vec<String>,
+    config_targets: Vec<crate::platform::ConfigTarget>,
+    config_updatable: bool,
     partition_filename: String,
     partition_file_path: String,
     partition_content: String,
     partition_file_exists: bool,
-    sdkconfig_updated: bool,
     partition_offset: String,
-    /// Detected from `CONFIG_ESPTOOLPY_FLASHSIZE` in sdkconfig.defaults — `None`
-    /// when the key is absent or unparseable, leaving the UI selection alone.
     flash_size_mb: Option<u32>,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveProjectRequest {
+    platform: String,
     project_path: String,
-    sdkconfig_file: String,
     partition_filename: String,
     partition_content: String,
-    sync_sdkconfig: bool,
+    partition_offset: String,
+    apply_config_update: bool,
+    config_targets: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,6 +47,7 @@ struct SaveProjectRequest {
 struct SaveProjectResponse {
     partition_file_path: String,
     sdkconfig_updated: bool,
+    warnings: Vec<String>,
 }
 
 struct SdkconfigSelection {
@@ -47,92 +56,92 @@ struct SdkconfigSelection {
 }
 
 struct SdkconfigEnsureResult {
-    sdkconfig_file: PathBuf,
-    sdkconfig_files: Vec<PathBuf>,
     partition_filename: String,
     partition_offset: u64,
     sdkconfig_updated: bool,
 }
 
 #[tauri::command]
-fn load_esp_project(project_path: String, flash_size_mb: u32, sync_sdkconfig: bool) -> Result<LoadProjectResponse, String> {
+fn load_project(project_path: String, flash_size_mb: u32) -> Result<LoadProjectResponse, String> {
     let project_dir = PathBuf::from(&project_path);
-    validate_project_root(&project_dir)?;
-
-    let selection = select_sdkconfig_for_load(&project_dir)?;
-    let sdkconfig_result = ensure_partition_sdkconfig(&selection, None, sync_sdkconfig)?;
-
-    let sdkconfig_contents: Vec<String> = sdkconfig_result
-        .sdkconfig_files
-        .iter()
-        .map(|file| fs::read_to_string(file).unwrap_or_default())
-        .collect();
-    let detected_flash_size_mb = extract_flash_size_mb(&sdkconfig_contents);
-
-    let partition_file_path = project_dir.join(&sdkconfig_result.partition_filename);
-    let partition_file_exists = partition_file_path.exists();
-
-    let partition_content = if partition_file_exists {
-        fs::read_to_string(&partition_file_path).map_err(|error| format!("Failed to read partition file: {error}"))?
-    } else {
-        generate_default_partition_csv(flash_size_mb)
-    };
-
-    Ok(LoadProjectResponse {
-        project_path: project_dir.to_string_lossy().to_string(),
-        sdkconfig_file: sdkconfig_result.sdkconfig_file.to_string_lossy().to_string(),
-        sdkconfig_files: sdkconfig_result
-            .sdkconfig_files
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect(),
-        partition_filename: sdkconfig_result.partition_filename,
-        partition_file_path: partition_file_path.to_string_lossy().to_string(),
-        partition_content,
-        partition_file_exists,
-        sdkconfig_updated: sdkconfig_result.sdkconfig_updated,
-        partition_offset: format_hex(sdkconfig_result.partition_offset),
-        flash_size_mb: detected_flash_size_mb,
-    })
-}
-
-#[tauri::command]
-fn save_project_state(request: SaveProjectRequest) -> Result<SaveProjectResponse, String> {
-    let project_dir = PathBuf::from(&request.project_path);
-    validate_project_root(&project_dir)?;
-
-    let selection = select_sdkconfig_for_save(&project_dir, &request.sdkconfig_file)?;
-    let sdkconfig_result = ensure_partition_sdkconfig(
-        &selection,
-        Some(request.partition_filename.as_str()),
-        request.sync_sdkconfig,
-    )?;
-
-    let partition_file_path = project_dir.join(&sdkconfig_result.partition_filename);
-
-    fs::write(&partition_file_path, request.partition_content)
-        .map_err(|error| format!("Failed to save partition file: {error}"))?;
-
-    Ok(SaveProjectResponse {
-        partition_file_path: partition_file_path.to_string_lossy().to_string(),
-        sdkconfig_updated: sdkconfig_result.sdkconfig_updated,
-    })
-}
-
-fn validate_project_root(project_dir: &Path) -> Result<(), String> {
     if !project_dir.exists() || !project_dir.is_dir() {
         return Err("Selected folder does not exist or is not a directory.".to_string());
     }
 
-    let cmake_file = project_dir.join("CMakeLists.txt");
-    if !cmake_file.exists() {
-        return Err("CMakeLists.txt not found. This does not look like an ESP-IDF project.".to_string());
-    }
+    let detection = crate::platform::detect_platform(&project_dir)?;
+    let adapter = crate::platform::adapter_for(detection.platform)?;
+    let ctx = adapter.read_context(&project_dir, flash_size_mb)?;
 
-    Ok(())
+    Ok(LoadProjectResponse {
+        platform: ctx.platform.as_str().to_string(),
+        // Report the actual detection result, not the adapter's placeholder, so the
+        // UI's platformConfidence/markers reflect how the project was classified.
+        platform_confidence: detection.confidence.to_string(),
+        markers: detection.markers,
+        project_path: project_dir.to_string_lossy().to_string(),
+        mcu: ctx.mcu,
+        sdkconfig_file: ctx
+            .config_targets
+            .first()
+            .map(|t| t.id.clone())
+            .unwrap_or_default(),
+        sdkconfig_files: ctx.config_targets.iter().map(|t| t.id.clone()).collect(),
+        config_targets: ctx.config_targets,
+        config_updatable: ctx.config_updatable,
+        partition_filename: ctx.partition_filename,
+        partition_file_path: ctx.partition_file_path,
+        partition_content: ctx.partition_content,
+        partition_file_exists: ctx.partition_file_exists,
+        partition_offset: ctx.partition_offset,
+        flash_size_mb: ctx.flash_size_mb,
+        warnings: ctx.warnings,
+    })
 }
 
-fn discover_sdkconfig_defaults_files(project_dir: &Path) -> Result<Vec<PathBuf>, String> {
+#[tauri::command]
+fn save_project(request: SaveProjectRequest) -> Result<SaveProjectResponse, String> {
+    let project_dir = PathBuf::from(&request.project_path);
+    if !project_dir.exists() || !project_dir.is_dir() {
+        return Err("Selected folder does not exist or is not a directory.".to_string());
+    }
+
+    let platform = match request.platform.as_str() {
+        "esp-idf" => crate::platform::Platform::EspIdf,
+        "platformio" => crate::platform::Platform::PlatformIo,
+        "arduino" => crate::platform::Platform::Arduino,
+        other => return Err(format!("Unknown platform: {other}")),
+    };
+    let adapter = crate::platform::adapter_for(platform)?;
+
+    // Fix #1: sanitize before any path join / write.
+    let safe_filename = sanitize_partition_filename(&request.partition_filename)?;
+    let partition_file_path = project_dir.join(&safe_filename);
+
+    fs::write(&partition_file_path, &request.partition_content)
+        .map_err(|e| format!("Failed to save partition file: {e}"))?;
+
+    let mut config_updated = false;
+    let mut warnings = Vec::new();
+    if request.apply_config_update {
+        let offset = parse_u64_value(&request.partition_offset).unwrap_or(DEFAULT_PARTITION_OFFSET);
+        let params = crate::platform::ConfigUpdateParams {
+            partition_filename: &safe_filename,
+            partition_offset: offset,
+            selected_targets: &request.config_targets,
+        };
+        let result = adapter.apply_config_update(&project_dir, &params)?;
+        config_updated = result.config_updated;
+        warnings = result.warnings;
+    }
+
+    Ok(SaveProjectResponse {
+        partition_file_path: partition_file_path.to_string_lossy().to_string(),
+        sdkconfig_updated: config_updated,
+        warnings,
+    })
+}
+
+pub(crate) fn discover_sdkconfig_defaults_files(project_dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files: Vec<PathBuf> = Vec::new();
 
     let defaults_file = project_dir.join("sdkconfig.defaults");
@@ -162,7 +171,7 @@ fn discover_sdkconfig_defaults_files(project_dir: &Path) -> Result<Vec<PathBuf>,
     Ok(files)
 }
 
-fn select_sdkconfig_for_load(project_dir: &Path) -> Result<SdkconfigSelection, String> {
+pub(crate) fn select_sdkconfig_for_load(project_dir: &Path) -> Result<SdkconfigSelection, String> {
     let sdkconfig_files = discover_sdkconfig_defaults_files(project_dir)?;
 
     let contents: Vec<String> = sdkconfig_files
@@ -186,7 +195,7 @@ fn select_sdkconfig_for_load(project_dir: &Path) -> Result<SdkconfigSelection, S
     })
 }
 
-fn select_sdkconfig_for_save(project_dir: &Path, requested_file: &str) -> Result<SdkconfigSelection, String> {
+pub(crate) fn select_sdkconfig_for_save(project_dir: &Path, requested_file: &str) -> Result<SdkconfigSelection, String> {
     let sdkconfig_files = discover_sdkconfig_defaults_files(project_dir)?;
 
     let requested_path = PathBuf::from(requested_file);
@@ -216,10 +225,11 @@ fn select_sdkconfig_for_save(project_dir: &Path, requested_file: &str) -> Result
     })
 }
 
-fn ensure_partition_sdkconfig(
+pub(crate) fn ensure_partition_sdkconfig(
     selection: &SdkconfigSelection,
     preferred_filename: Option<&str>,
     write_changes: bool,
+    offset_override: Option<u64>,
 ) -> Result<SdkconfigEnsureResult, String> {
     let sdkconfig_files = &selection.sdkconfig_files;
 
@@ -231,7 +241,8 @@ fn ensure_partition_sdkconfig(
         discovered_contents.push(content);
     }
 
-    let (discovered_filename, partition_offset, _) = resolve_partition_settings(&discovered_contents);
+    let (discovered_filename, discovered_offset, _) = resolve_partition_settings(&discovered_contents);
+    let partition_offset = offset_override.unwrap_or(discovered_offset);
     let partition_filename = preferred_filename
         .map(str::trim)
         .filter(|name| !name.is_empty())
@@ -275,8 +286,6 @@ fn ensure_partition_sdkconfig(
     }
 
     Ok(SdkconfigEnsureResult {
-        sdkconfig_file,
-        sdkconfig_files: sdkconfig_files.to_vec(),
         partition_filename,
         partition_offset,
         sdkconfig_updated,
@@ -307,15 +316,107 @@ fn parse_flash_size_string(value: &str) -> Option<u32> {
     stripped.parse::<u32>().ok().filter(|&v| v > 0)
 }
 
-fn extract_flash_size_mb(contents: &[String]) -> Option<u32> {
+/// Validate a partition CSV filename intended to be written inside the project
+/// folder. Rejects path separators, parent traversal, absolute paths, and any
+/// extension other than `.csv`. Returns the trimmed, safe filename.
+pub(crate) fn sanitize_partition_filename(raw: &str) -> Result<String, String> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return Err("Partition filename must not be empty.".to_string());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("Partition filename must not contain path separators.".to_string());
+    }
+    // Require exactly one *normal* path component. This rejects "..",
+    // absolute paths ("/etc/x.csv"), and Windows drive-relative forms
+    // ("C:x.csv") — all of which can escape the project folder when joined.
+    let mut components = Path::new(name).components();
+    let single_normal = matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    );
+    if !single_normal {
+        return Err("Partition filename must be a single file name (no path components).".to_string());
+    }
+    if !name.to_ascii_lowercase().ends_with(".csv") {
+        return Err("Partition filename must end with .csv".to_string());
+    }
+    Ok(name.to_string())
+}
+
+/// Detect the ESP-IDF target chip from a single sdkconfig text body.
+/// Prefers the authoritative `CONFIG_IDF_TARGET="esp32s3"` string; falls back to
+/// the boolean form `CONFIG_IDF_TARGET_ESP32S3=y` -> "esp32s3".
+/// Callers iterate sources in precedence order and take the first `Some`.
+pub(crate) fn extract_idf_target(content: &str) -> Option<String> {
+    if let Some(value) = extract_config_string(content, "CONFIG_IDF_TARGET") {
+        let trimmed = value.trim().to_ascii_lowercase();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("CONFIG_IDF_TARGET_") {
+            if let Some(chip) = rest.strip_suffix("=y") {
+                let chip = chip.trim();
+                if !chip.is_empty() {
+                    return Some(chip.to_ascii_lowercase());
+                }
+            }
+        }
+    }
+    None
+}
+
+pub(crate) fn extract_flash_size_mb(contents: &[String]) -> Option<u32> {
     for content in contents {
+        // Authoritative string form first.
         if let Some(value) = extract_config_string(content, "CONFIG_ESPTOOLPY_FLASHSIZE") {
             if let Some(size) = parse_flash_size_string(&value) {
                 return Some(size);
             }
         }
+        // Boolean form: CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("CONFIG_ESPTOOLPY_FLASHSIZE_") {
+                if let Some(size_token) = rest.strip_suffix("=y") {
+                    if let Some(size) = parse_flash_size_string(size_token) {
+                        return Some(size);
+                    }
+                }
+            }
+        }
     }
     None
+}
+
+/// Read ESP-IDF config bodies in detection precedence (D5):
+/// generated `sdkconfig`, then `sdkconfig.defaults`, then `sdkconfig.defaults.*`
+/// (sorted). Missing files are skipped. Used for MCU/flash detection only.
+pub(crate) fn read_idf_config_sources(project_dir: &Path) -> Vec<String> {
+    let mut ordered: Vec<PathBuf> = Vec::new();
+
+    let generated = project_dir.join("sdkconfig");
+    if generated.is_file() {
+        ordered.push(generated);
+    }
+
+    if let Ok(defaults_files) = discover_sdkconfig_defaults_files(project_dir) {
+        ordered.extend(defaults_files);
+    }
+
+    ordered
+        .iter()
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .collect()
 }
 
 fn extract_config_string(content: &str, key: &str) -> Option<String> {
@@ -380,6 +481,36 @@ fn resolve_partition_settings(contents: &[String]) -> (String, u64, Option<usize
     )
 }
 
+const PARTITION_CHOICE_SIBLINGS: [&str; 3] = [
+    "CONFIG_PARTITION_TABLE_SINGLE_APP",
+    "CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE",
+    "CONFIG_PARTITION_TABLE_TWO_OTA",
+];
+
+/// Remove any existing sibling-choice lines (either `=value` or
+/// `# ... is not set`) from the retained lines so we can re-emit them as
+/// "not set". Returns the filtered lines.
+fn strip_partition_choice_lines(lines: Vec<String>) -> Vec<String> {
+    lines
+        .into_iter()
+        .filter(|line| {
+            let t = line.trim();
+            !PARTITION_CHOICE_SIBLINGS.iter().any(|key| {
+                t.starts_with(&format!("{key}="))
+                    || t == format!("# {key} is not set")
+            })
+        })
+        .collect()
+}
+
+fn partition_choice_not_set_block() -> String {
+    PARTITION_CHOICE_SIBLINGS
+        .iter()
+        .map(|key| format!("# {key} is not set"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn normalize_sdkconfig_partition_content(
     content: &str,
     partition_filename: &str,
@@ -430,6 +561,8 @@ fn normalize_sdkconfig_partition_content(
     {
         retained_lines.pop();
     }
+
+    let retained_lines = strip_partition_choice_lines(retained_lines);
 
     let mut normalized = String::new();
     if !retained_lines.is_empty() {
@@ -521,7 +654,7 @@ fn align_down(value: u64, alignment: u64) -> u64 {
     (value / alignment) * alignment
 }
 
-fn format_hex(value: u64) -> String {
+pub(crate) fn format_hex(value: u64) -> String {
     format!("0x{:X}", value)
 }
 
@@ -535,14 +668,15 @@ fn format_size_unit(bytes: u64) -> String {
     format_hex(bytes)
 }
 
-fn build_partition_block(filename: &str, partition_offset: u64) -> String {
+pub(crate) fn build_partition_block(filename: &str, partition_offset: u64) -> String {
     format!(
-        "\n#\n# Partition Table\n#\nCONFIG_PARTITION_TABLE_CUSTOM=y\nCONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"{filename}\"\nCONFIG_PARTITION_TABLE_FILENAME=\"{filename}\"\nCONFIG_PARTITION_TABLE_OFFSET={}\nCONFIG_PARTITION_TABLE_MD5=y\n# end of Partition Table\n",
-        format_hex(partition_offset)
+        "\n#\n# Partition Table\n#\n{choices}\nCONFIG_PARTITION_TABLE_CUSTOM=y\nCONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"{filename}\"\nCONFIG_PARTITION_TABLE_FILENAME=\"{filename}\"\nCONFIG_PARTITION_TABLE_OFFSET={offset}\nCONFIG_PARTITION_TABLE_MD5=y\n# end of Partition Table\n",
+        choices = partition_choice_not_set_block(),
+        offset = format_hex(partition_offset),
     )
 }
 
-fn generate_default_partition_csv(flash_size_mb: u32) -> String {
+pub(crate) fn generate_default_partition_csv(flash_size_mb: u32) -> String {
     let flash_bytes = u64::from(flash_size_mb.max(2)) * 1024 * 1024;
 
     let nvs_size: u64 = 16 * 1024;
@@ -588,7 +722,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![load_esp_project, save_project_state])
+        .invoke_handler(tauri::generate_handler![load_project, save_project])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -820,33 +954,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_project_root_accepts_a_folder_with_cmakelists() {
-        let dir = unique_temp_dir("validate_ok");
-        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
-
-        assert!(validate_project_root(&dir).is_ok());
-
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn validate_project_root_rejects_missing_cmakelists() {
-        let dir = unique_temp_dir("validate_no_cmake");
-
-        let result = validate_project_root(&dir);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("CMakeLists.txt"));
-
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn validate_project_root_rejects_a_nonexistent_path() {
-        let missing = std::env::temp_dir().join("ept_test_definitely_missing_dir_xyz");
-        assert!(validate_project_root(&missing).is_err());
-    }
-
-    #[test]
     fn discover_sdkconfig_defaults_files_finds_and_sorts_variants() {
         let dir = unique_temp_dir("discover");
         write_file(&dir, "sdkconfig.defaults", "");
@@ -913,7 +1020,7 @@ mod tests {
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
 
         let selection = select_sdkconfig_for_load(&dir).expect("selection");
-        let result = ensure_partition_sdkconfig(&selection, Some("partitions.csv"), true)
+        let result = ensure_partition_sdkconfig(&selection, Some("partitions.csv"), true, None)
             .expect("ensure");
 
         assert!(result.sdkconfig_updated);
@@ -927,15 +1034,18 @@ mod tests {
     // ----- command integration tests -----
 
     #[test]
-    fn load_esp_project_reads_an_existing_partition_file() {
+    fn load_project_reads_an_existing_partition_file() {
         let dir = unique_temp_dir("load_existing");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        fs::create_dir_all(dir.join("main")).expect("create main dir");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
         write_file(&dir, "partitions.csv", "nvs, data, nvs, 0x10000, 16K,\n");
 
-        let response = load_esp_project(dir.to_string_lossy().to_string(), 4, false)
+        let response = load_project(dir.to_string_lossy().to_string(), 4)
             .expect("load project");
 
+        assert_eq!(response.platform, "esp-idf");
+        assert_eq!(response.mcu.as_deref(), Some("esp32"));
         assert!(response.partition_file_exists);
         assert!(response.partition_content.contains("nvs, data, nvs"));
         assert_eq!(response.partition_filename, "partitions.csv");
@@ -944,14 +1054,16 @@ mod tests {
     }
 
     #[test]
-    fn load_esp_project_generates_defaults_when_partition_file_is_missing() {
+    fn load_project_generates_defaults_when_partition_file_is_missing() {
         let dir = unique_temp_dir("load_default");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        fs::create_dir_all(dir.join("main")).expect("create main dir");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
 
-        let response = load_esp_project(dir.to_string_lossy().to_string(), 4, false)
+        let response = load_project(dir.to_string_lossy().to_string(), 4)
             .expect("load project");
 
+        assert_eq!(response.platform, "esp-idf");
         assert!(!response.partition_file_exists);
         assert!(response.partition_content.contains("factory, app, factory"));
 
@@ -959,54 +1071,70 @@ mod tests {
     }
 
     #[test]
-    fn load_esp_project_rejects_a_folder_without_cmakelists() {
+    fn load_project_rejects_an_unrecognized_folder() {
         let dir = unique_temp_dir("load_invalid");
-        write_file(&dir, "sdkconfig.defaults", "");
+        write_file(&dir, "README.md", "hi");
 
-        let result = load_esp_project(dir.to_string_lossy().to_string(), 4, false);
+        let result = load_project(dir.to_string_lossy().to_string(), 4);
         assert!(result.is_err());
 
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn save_project_state_writes_the_partition_file() {
+    fn save_project_writes_the_partition_file_and_sanitizes_name() {
         let dir = unique_temp_dir("save_csv");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
 
         let request = SaveProjectRequest {
+            platform: "esp-idf".to_string(),
             project_path: dir.to_string_lossy().to_string(),
-            sdkconfig_file: dir.join("sdkconfig.defaults").to_string_lossy().to_string(),
             partition_filename: "partitions.csv".to_string(),
             partition_content: "nvs, data, nvs, 0x10000, 16K,\n".to_string(),
-            sync_sdkconfig: false,
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: false,
+            config_targets: vec![],
         };
-
-        let response = save_project_state(request).expect("save project");
+        let response = save_project(request).expect("save");
         assert!(response.partition_file_path.ends_with("partitions.csv"));
+        assert_eq!(
+            fs::read_to_string(dir.join("partitions.csv")).unwrap(),
+            "nvs, data, nvs, 0x10000, 16K,\n"
+        );
 
-        let written = fs::read_to_string(dir.join("partitions.csv")).expect("read partition file");
-        assert_eq!(written, "nvs, data, nvs, 0x10000, 16K,\n");
+        // traversal filename is rejected
+        let bad = SaveProjectRequest {
+            platform: "esp-idf".to_string(),
+            project_path: dir.to_string_lossy().to_string(),
+            partition_filename: "../escape.csv".to_string(),
+            partition_content: "x".to_string(),
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: false,
+            config_targets: vec![],
+        };
+        assert!(save_project(bad).is_err());
 
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn save_project_state_syncs_sdkconfig_when_requested() {
+    fn save_project_updates_config_when_requested() {
         let dir = unique_temp_dir("save_sync");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
 
         let request = SaveProjectRequest {
+            platform: "esp-idf".to_string(),
             project_path: dir.to_string_lossy().to_string(),
-            sdkconfig_file: dir.join("sdkconfig.defaults").to_string_lossy().to_string(),
             partition_filename: "partitions.csv".to_string(),
             partition_content: "nvs, data, nvs, 0x10000, 16K,\n".to_string(),
-            sync_sdkconfig: true,
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: true,
+            config_targets: vec![dir.join("sdkconfig.defaults").to_string_lossy().to_string()],
         };
 
-        let response = save_project_state(request).expect("save project");
+        let response = save_project(request).expect("save project");
         assert!(response.sdkconfig_updated);
 
         let sdkconfig = fs::read_to_string(dir.join("sdkconfig.defaults")).expect("read sdkconfig");
@@ -1043,9 +1171,10 @@ mod tests {
     }
 
     #[test]
-    fn load_esp_project_detects_flash_size_from_sdkconfig() {
+    fn load_project_detects_flash_size_from_sdkconfig() {
         let dir = unique_temp_dir("load_flash_size");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        fs::create_dir_all(dir.join("main")).expect("create main dir");
         write_file(
             &dir,
             "sdkconfig.defaults",
@@ -1053,9 +1182,156 @@ mod tests {
         );
 
         let response =
-            load_esp_project(dir.to_string_lossy().to_string(), 2, false).expect("load project");
+            load_project(dir.to_string_lossy().to_string(), 2).expect("load project");
         assert_eq!(response.flash_size_mb, Some(16));
+        assert_eq!(response.mcu.as_deref(), Some("esp32s3"));
 
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // ----- Task 1: sanitize_partition_filename -----
+
+    #[test]
+    fn sanitize_partition_filename_accepts_plain_csv_names() {
+        assert_eq!(sanitize_partition_filename("partitions.csv").unwrap(), "partitions.csv");
+        assert_eq!(sanitize_partition_filename("  custom_table.csv  ").unwrap(), "custom_table.csv");
+    }
+
+    #[test]
+    fn sanitize_partition_filename_rejects_traversal_and_absolute_and_non_csv() {
+        assert!(sanitize_partition_filename("../evil.csv").is_err());
+        assert!(sanitize_partition_filename("sub/dir/p.csv").is_err());
+        assert!(sanitize_partition_filename("C:/Windows/system.csv").is_err());
+        assert!(sanitize_partition_filename("/etc/passwd.csv").is_err());
+        assert!(sanitize_partition_filename("notes.txt").is_err());
+        assert!(sanitize_partition_filename("").is_err());
+        assert!(sanitize_partition_filename("   ").is_err());
+    }
+
+    #[test]
+    fn sanitize_partition_filename_rejects_windows_drive_relative_and_bare_dotdot() {
+        assert!(sanitize_partition_filename("C:foo.csv").is_err());
+        assert!(sanitize_partition_filename("..").is_err());
+    }
+
+    #[test]
+    fn sanitize_partition_filename_allows_double_dot_within_name() {
+        assert_eq!(sanitize_partition_filename("foo..bar.csv").unwrap(), "foo..bar.csv");
+    }
+
+    // ----- Task 2: extract_idf_target -----
+
+    #[test]
+    fn extract_idf_target_reads_string_form() {
+        let content = "CONFIG_IDF_TARGET=\"esp32s3\"\nCONFIG_IDF_TARGET_ESP32S3=y\n";
+        assert_eq!(extract_idf_target(content).as_deref(), Some("esp32s3"));
+    }
+
+    #[test]
+    fn extract_idf_target_falls_back_to_boolean_form() {
+        let content = "CONFIG_IDF_TARGET_ESP32C6=y\n";
+        assert_eq!(extract_idf_target(content).as_deref(), Some("esp32c6"));
+    }
+
+    #[test]
+    fn extract_idf_target_returns_none_when_absent() {
+        assert_eq!(extract_idf_target("CONFIG_FOO=y\n"), None);
+    }
+
+    // ----- Task 3: extract_flash_size_mb boolean form -----
+
+    #[test]
+    fn extract_flash_size_mb_reads_boolean_form() {
+        let contents = vec!["CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y\n".to_string()];
+        assert_eq!(extract_flash_size_mb(&contents), Some(8));
+    }
+
+    #[test]
+    fn extract_flash_size_mb_prefers_string_form_over_boolean() {
+        let contents = vec![
+            "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y\nCONFIG_ESPTOOLPY_FLASHSIZE=\"4MB\"\n".to_string(),
+        ];
+        assert_eq!(extract_flash_size_mb(&contents), Some(4));
+    }
+
+    // ----- Task 4: read_idf_config_sources -----
+
+    #[test]
+    fn read_idf_config_sources_orders_generated_sdkconfig_first() {
+        let dir = unique_temp_dir("precedence");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_ESPTOOLPY_FLASHSIZE=\"4MB\"\n");
+        write_file(&dir, "sdkconfig", "CONFIG_ESPTOOLPY_FLASHSIZE=\"8MB\"\n");
+
+        let sources = read_idf_config_sources(&dir);
+        // generated sdkconfig must come first so its 8MB wins
+        assert_eq!(extract_flash_size_mb(&sources), Some(8));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_idf_config_sources_falls_back_to_defaults_when_no_generated() {
+        let dir = unique_temp_dir("precedence_defaults");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_ESPTOOLPY_FLASHSIZE=\"16MB\"\n");
+
+        let sources = read_idf_config_sources(&dir);
+        assert_eq!(extract_flash_size_mb(&sources), Some(16));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_idf_config_sources_reads_generated_sdkconfig_alone() {
+        let dir = unique_temp_dir("only_generated");
+        write_file(&dir, "sdkconfig", "CONFIG_ESPTOOLPY_FLASHSIZE=\"2MB\"\n");
+        let sources = read_idf_config_sources(&dir);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(extract_flash_size_mb(&sources), Some(2));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // ----- Task 7: sibling-choice normalization -----
+
+    #[test]
+    fn normalize_sets_partition_choice_siblings_not_set() {
+        let original = "CONFIG_PARTITION_TABLE_SINGLE_APP=y\nCONFIG_PARTITION_TABLE_TWO_OTA=y\n";
+        let normalized = normalize_sdkconfig_partition_content(original, "partitions.csv", 0x8000);
+
+        assert!(normalized.contains("# CONFIG_PARTITION_TABLE_SINGLE_APP is not set"));
+        assert!(normalized.contains("# CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE is not set"));
+        assert!(normalized.contains("# CONFIG_PARTITION_TABLE_TWO_OTA is not set"));
+        assert!(!normalized.contains("CONFIG_PARTITION_TABLE_SINGLE_APP=y"));
+        assert!(!normalized.contains("CONFIG_PARTITION_TABLE_TWO_OTA=y"));
+        assert!(normalized.contains("CONFIG_PARTITION_TABLE_CUSTOM=y"));
+    }
+
+    #[test]
+    fn normalize_partition_choice_is_idempotent() {
+        let original = "CONFIG_PARTITION_TABLE_SINGLE_APP=y\n";
+        let once = normalize_sdkconfig_partition_content(original, "partitions.csv", 0x8000);
+        let twice = normalize_sdkconfig_partition_content(&once, "partitions.csv", 0x8000);
+        assert_eq!(once, twice);
+    }
+
+    // ----- Task 9: offset persistence -----
+
+    #[test]
+    fn apply_config_update_writes_requested_offset() {
+        let dir = unique_temp_dir("offset_persist");
+        write_file(&dir, "CMakeLists.txt", "project(demo)\n");
+        write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
+
+        let adapter = crate::platform::esp_idf::EspIdfAdapter;
+        let params = crate::platform::ConfigUpdateParams {
+            partition_filename: "partitions.csv",
+            partition_offset: 0x9000,
+            selected_targets: &["sdkconfig.defaults".to_string()],
+        };
+        use crate::platform::ProjectAdapter;
+        adapter.apply_config_update(&dir, &params).expect("apply");
+
+        let written = fs::read_to_string(dir.join("sdkconfig.defaults")).unwrap();
+        assert!(written.contains("CONFIG_PARTITION_TABLE_OFFSET=0x9000"));
         fs::remove_dir_all(&dir).ok();
     }
 }
