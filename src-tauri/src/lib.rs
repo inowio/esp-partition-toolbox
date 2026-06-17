@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 pub(crate) mod platform;
 
 const DEFAULT_PARTITION_FILENAME: &str = "partitions.csv";
-const DEFAULT_PARTITION_OFFSET: u64 = 0x8000;
-const DEFAULT_PARTITION_START: u64 = 0x10000;
+pub(crate) const DEFAULT_PARTITION_OFFSET: u64 = 0x8000;
 const SECTOR_SIZE: u64 = 0x1000;
 
 #[derive(Debug, Serialize)]
@@ -699,19 +698,19 @@ pub(crate) fn build_partition_block(filename: &str, partition_offset: u64) -> St
     )
 }
 
-pub(crate) fn generate_default_partition_csv(flash_size_mb: u32) -> String {
+pub(crate) fn generate_default_partition_csv(flash_size_mb: u32, partition_table_offset: u64) -> String {
     let flash_bytes = u64::from(flash_size_mb.max(2)) * 1024 * 1024;
 
     let nvs_size: u64 = 16 * 1024;
     let phy_size: u64 = 4 * 1024;
-    let base_size = nvs_size + phy_size;
 
-    let app_start = align_up(DEFAULT_PARTITION_START + base_size, 0x10000);
-    let app_size = align_down(flash_bytes.saturating_sub(app_start), SECTOR_SIZE).max(SECTOR_SIZE);
-
-    let nvs_offset = DEFAULT_PARTITION_START;
+    // The first partition sits one sector after the partition table (e.g. a
+    // 0x8000 table → nvs at 0x9000), matching ESP-IDF/esptool and the frontend
+    // re-pack so a generated default and a loaded one line up.
+    let nvs_offset = align_up(partition_table_offset + SECTOR_SIZE, SECTOR_SIZE);
     let phy_offset = align_up(nvs_offset + nvs_size, SECTOR_SIZE);
     let app_offset = align_up(phy_offset + phy_size, 0x10000);
+    let app_size = align_down(flash_bytes.saturating_sub(app_offset), SECTOR_SIZE).max(SECTOR_SIZE);
 
     let mut lines = vec![
         "# Name, Type, SubType, Offset, Size, Flags".to_string(),
@@ -773,7 +772,7 @@ mod tests {
 
     #[test]
     fn default_partition_csv_contains_required_rows() {
-        let content = generate_default_partition_csv(8);
+        let content = generate_default_partition_csv(8, 0x8000);
 
         assert!(content.contains("nvs, data, nvs"));
         assert!(content.contains("phy_init, data, phy"));
@@ -784,9 +783,22 @@ mod tests {
     }
 
     #[test]
+    fn default_partition_csv_places_first_partition_after_the_table() {
+        // First partition sits one sector after the table offset and tracks it:
+        // a 0x8000 table → nvs at 0x9000; a 0x10000 table → nvs at 0x11000.
+        let at_8000 = generate_default_partition_csv(4, 0x8000);
+        let nvs_8000 = at_8000.lines().find(|l| l.starts_with("nvs")).unwrap();
+        assert!(nvs_8000.contains("0x9000"), "expected nvs at 0x9000, got: {nvs_8000}");
+
+        let at_10000 = generate_default_partition_csv(4, 0x10000);
+        let nvs_10000 = at_10000.lines().find(|l| l.starts_with("nvs")).unwrap();
+        assert!(nvs_10000.contains("0x11000"), "expected nvs at 0x11000, got: {nvs_10000}");
+    }
+
+    #[test]
     fn default_partition_csv_has_64kb_aligned_app_offset() {
         for mb in [2, 4, 8, 16, 32] {
-            let content = generate_default_partition_csv(mb);
+            let content = generate_default_partition_csv(mb, 0x8000);
             let factory_line = content.lines().find(|l| l.starts_with("factory")).unwrap();
             let offset_str = factory_line.split(',').nth(3).unwrap().trim();
             let offset = u64::from_str_radix(offset_str.trim_start_matches("0x").trim_start_matches("0X"), 16).unwrap();
@@ -797,7 +809,7 @@ mod tests {
     #[test]
     fn default_partition_csv_never_exceeds_flash_boundary() {
         for mb in [2, 4, 8, 16, 32, 64, 128, 256, 512] {
-            let content = generate_default_partition_csv(mb);
+            let content = generate_default_partition_csv(mb, 0x8000);
             let flash_bytes = u64::from(mb) * 1024 * 1024;
 
             let mut max_end: u64 = 0;

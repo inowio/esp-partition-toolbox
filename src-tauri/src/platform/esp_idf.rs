@@ -29,7 +29,7 @@ impl ProjectAdapter for EspIdfAdapter {
             std::fs::read_to_string(&partition_file_path)
                 .map_err(|e| format!("Failed to read partition file: {e}"))?
         } else {
-            generate_default_partition_csv(fallback_flash_mb)
+            generate_default_partition_csv(fallback_flash_mb, resolved.partition_offset)
         };
 
         let config_targets = selection

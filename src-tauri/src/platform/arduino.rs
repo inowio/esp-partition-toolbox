@@ -11,7 +11,7 @@ use crate::platform::{
     mcu_from_board, ConfigTarget, ConfigUpdateParams, ConfigUpdateResult, Platform, ProjectAdapter,
     ProjectContext,
 };
-use crate::{generate_default_partition_csv, parse_flash_size_string};
+use crate::{generate_default_partition_csv, parse_flash_size_string, DEFAULT_PARTITION_OFFSET};
 
 pub struct ArduinoAdapter;
 
@@ -196,7 +196,7 @@ impl ProjectAdapter for ArduinoAdapter {
             std::fs::read_to_string(&partition_file_path)
                 .map_err(|e| format!("Failed to read partition file: {e}"))?
         } else {
-            generate_default_partition_csv(flash_size_mb.unwrap_or(fallback_flash_mb))
+            generate_default_partition_csv(flash_size_mb.unwrap_or(fallback_flash_mb), DEFAULT_PARTITION_OFFSET)
         };
 
         let has_yaml = yaml_path.is_some();

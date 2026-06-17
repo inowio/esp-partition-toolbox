@@ -5,7 +5,7 @@ use crate::platform::{
     ProjectContext,
 };
 use crate::platform::ini;
-use crate::{generate_default_partition_csv, parse_flash_size_string};
+use crate::{generate_default_partition_csv, parse_flash_size_string, DEFAULT_PARTITION_OFFSET};
 
 pub struct PlatformIoAdapter;
 
@@ -67,7 +67,7 @@ impl ProjectAdapter for PlatformIoAdapter {
             std::fs::read_to_string(&partition_file_path)
                 .map_err(|e| format!("Failed to read partition file: {e}"))?
         } else {
-            generate_default_partition_csv(fallback_flash_mb)
+            generate_default_partition_csv(fallback_flash_mb, DEFAULT_PARTITION_OFFSET)
         };
 
         let config_targets = envs
