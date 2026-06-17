@@ -97,6 +97,7 @@ export interface PartitionProjectState {
 
 export interface PartitionProjectActions {
   setPlatform: (value: Platform) => void;
+  changePlatform: (value: Platform) => Promise<void>;
   setMcu: (value: string | null) => void;
   setFlashSizeMb: (value: number) => void;
   setComments: (value: string) => void;
@@ -373,6 +374,38 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
   }
 
+  // The Platform dropdown re-interprets the ALREADY-LOADED folder as the chosen
+  // platform — no folder picker. When no project is loaded yet, it just sets the
+  // platform used for the next Load. If the folder isn't that platform (its
+  // config file is missing) the backend errors; we keep the current platform
+  // (the controlled <select> reverts) and explain, instead of blocking.
+  async function changePlatform(next: Platform): Promise<void> {
+    if (!projectPath) {
+      setPlatform(next);
+      return;
+    }
+    if (next === platform) {
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const response = await invoke<LoadProjectResponse>("load_project", {
+        projectPath,
+        flashSizeMb,
+        forcePlatform: next,
+      });
+      hydrateProjectState(response);
+    } catch (error) {
+      pushToast(
+        `This folder isn't a ${platformLabel(next)} project — keeping ${platformLabel(platform)}. (${String(error)})`,
+        "warning",
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   function doCloseProject(): void {
     const defaults = defaultRowsForFlashSize(defaultFlash);
 
@@ -539,6 +572,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     partitionInfoText,
     partitionCsvText,
     setPlatform,
+    changePlatform,
     setMcu,
     setFlashSizeMb,
     setSdkconfigFile,

@@ -408,6 +408,60 @@ describe("usePartitionProject", () => {
     expect(invokeMock).toHaveBeenCalledWith("load_project", expect.objectContaining({ forcePlatform: "platformio" }));
   });
 
+  it("changePlatform re-reads the loaded folder as the new platform without a folder dialog", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result); // loads esp-idf at C:/dev/esp-project
+    expect(result.current.platform).toBe("esp-idf");
+
+    openMock.mockClear();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({ ...LOAD_RESPONSE, platform: "platformio" });
+      }
+      return Promise.reject(new Error(`unexpected: ${command}`));
+    });
+
+    await act(async () => { await result.current.changePlatform("platformio"); });
+
+    expect(openMock).not.toHaveBeenCalled(); // no folder picker
+    expect(invokeMock).toHaveBeenCalledWith(
+      "load_project",
+      expect.objectContaining({ projectPath: "C:/dev/esp-project", forcePlatform: "platformio" }),
+    );
+    expect(result.current.platform).toBe("platformio");
+  });
+
+  it("changePlatform reverts and warns when the folder isn't the chosen platform", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result); // esp-idf
+    expect(result.current.platform).toBe("esp-idf");
+
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.reject(new Error("Failed to read platformio.ini"));
+      }
+      return Promise.reject(new Error(`unexpected: ${command}`));
+    });
+
+    await act(async () => { await result.current.changePlatform("platformio"); });
+
+    expect(result.current.platform).toBe("esp-idf"); // dropdown reverts
+    expect(result.current.toasts.some(
+      (t) => t.kind === "warning" && /isn't a PlatformIO project/i.test(t.message),
+    )).toBe(true);
+  });
+
+  it("changePlatform with no project loaded just sets the platform", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.platform).toBe("esp-idf");
+    invokeMock.mockClear();
+
+    await act(async () => { await result.current.changePlatform("arduino"); });
+
+    expect(result.current.platform).toBe("arduino");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
   it("renders a platform-specific config preview", () => {
     const { result } = renderHook(() => usePartitionProject());
     expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_CUSTOM=y");

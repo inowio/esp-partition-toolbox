@@ -49,7 +49,7 @@ function App() {
     toasts,
     partitionInfoText,
     partitionCsvText,
-    setPlatform,
+    changePlatform,
     setMcu,
     setFlashSizeMb,
     setSdkconfigFile,
@@ -156,13 +156,7 @@ function App() {
           configTargets={configTargets}
           configUpdatable={configUpdatable}
           isBusy={isBusy}
-          onPlatformChange={(p) => {
-            if (projectPath) {
-              void loadProject(p);
-            } else {
-              setPlatform(p);
-            }
-          }}
+          onPlatformChange={(p) => void changePlatform(p)}
           onMcuChange={setMcu}
           onFlashSizeChange={setFlashSizeMb}
           onSyncSdkconfigChange={setSyncSdkconfig}
