@@ -12,15 +12,15 @@ import KpiCards from "./components/KpiCards";
 import PartitionInformationCard from "./components/PartitionInformationCard";
 import PartitionPreviewCard from "./components/PartitionPreviewCard";
 import PartitionTableCard from "./components/PartitionTableCard";
-import ProjectHeaderCard from "./components/ProjectHeaderCard";
+import ProjectActionsCard from "./components/ProjectActionsCard";
+import TargetOutputCard from "./components/TargetOutputCard";
 import ToastStack from "./components/ToastStack";
 import UpdateDialog from "./components/UpdateDialog";
 import VisualMapCard from "./components/VisualMapCard";
 import { checkForUpdate, installAndRelaunch } from "./api/updater";
 import type { UpdatePrompt } from "./api/updater";
 import usePartitionProject from "./hooks/usePartitionProject";
-
-const FLASH_OPTIONS_MB = [2, 4, 8, 16, 32, 64, 128, 256, 512];
+import { FLASH_OPTIONS_MB } from "./constants/flashOptions";
 
 function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
@@ -31,8 +31,11 @@ function App() {
   const {
     isBusy,
     projectPath,
+    platform,
+    mcu,
     sdkconfigFile,
-    sdkconfigFiles,
+    configTargets,
+    configUpdatable,
     syncSdkconfig,
     partitionFilename,
     partitionOffset,
@@ -46,6 +49,8 @@ function App() {
     toasts,
     partitionInfoText,
     partitionCsvText,
+    changePlatform,
+    setMcu,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,
@@ -111,6 +116,22 @@ function App() {
     };
   }, []);
 
+  // Block the WebView's reload (F5) and caret-browsing (F7) accelerator keys —
+  // they don't belong in a desktop app. Find (F3 / Ctrl+F) is left enabled on
+  // purpose. Capture phase so we cancel before any field-level handler runs.
+  useEffect(() => {
+    function blockShortcut(event: KeyboardEvent): void {
+      if (event.key === "F5" || event.key === "F7") {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("keydown", blockShortcut, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", blockShortcut, { capture: true });
+    };
+  }, []);
+
   function toggleTheme(): void {
     setIsDarkTheme((currentTheme) => !currentTheme);
   }
@@ -127,32 +148,42 @@ function App() {
         onShowHelp={() => setIsHelpOpen(true)}
       />
 
-      <main className="flex w-full flex-col gap-5 px-4 py-5 md:px-8 md:py-7">
-        <ProjectHeaderCard
-          flashOptions={FLASH_OPTIONS_MB}
-          flashSizeMb={flashSizeMb}
+      <main className="flex w-full flex-col gap-5 px-4 py-4">
+        <ProjectActionsCard
           projectPath={projectPath}
-          sdkconfigFile={sdkconfigFile}
-          sdkconfigFiles={sdkconfigFiles}
-          syncSdkconfig={syncSdkconfig}
-          partitionFilename={partitionFilename}
-          partitionOffset={partitionOffset}
+          platform={platform}
           statusMessage={statusMessage}
           isBusy={isBusy}
-          onFlashSizeChange={setFlashSizeMb}
-          onSdkconfigFileChange={setSdkconfigFile}
-          onSyncSdkconfigChange={setSyncSdkconfig}
-          onLoad={loadProject}
+          onLoad={() => void loadProject()}
           onSave={saveProject}
           onClose={closeProject}
           onReset={resetToSnapshot}
-          onPartitionOffsetChange={setPartitionOffset}
+        />
+
+        <TargetOutputCard
+          platform={platform}
+          mcu={mcu}
+          flashSizeMb={flashSizeMb}
+          flashOptions={FLASH_OPTIONS_MB}
+          partitionFilename={partitionFilename}
+          projectPath={projectPath}
+          syncSdkconfig={syncSdkconfig}
+          sdkconfigFile={sdkconfigFile}
+          configTargets={configTargets}
+          configUpdatable={configUpdatable}
+          isBusy={isBusy}
+          onPlatformChange={(p) => void changePlatform(p)}
+          onMcuChange={setMcu}
+          onFlashSizeChange={setFlashSizeMb}
+          onSyncSdkconfigChange={setSyncSdkconfig}
+          onSdkconfigFileChange={setSdkconfigFile}
         />
 
         <KpiCards
           flashBytes={layout.flashBytes}
           allocated={layout.allocated}
           free={layout.free}
+          usableBytes={layout.usable}
           reservedBytes={layout.reservedBytes}
         />
 
@@ -167,6 +198,8 @@ function App() {
         <PartitionTableCard
           rows={layout.rows}
           flashBytes={layout.flashBytes}
+          partitionOffset={partitionOffset}
+          onPartitionOffsetChange={setPartitionOffset}
           onAddRow={addRow}
           onUpdateRow={updateRow}
           onRequestDelete={setRowPendingDelete}

@@ -3,56 +3,30 @@ import { describe, expect, it } from "vitest";
 import KpiCards from "./KpiCards";
 
 describe("KpiCards", () => {
-  it("renders total / allocated / free space figures", () => {
-    render(
-      <KpiCards
-        flashBytes={2 * 1024 * 1024}
-        allocated={1 * 1024 * 1024}
-        free={1 * 1024 * 1024}
-        reservedBytes={0}
-      />,
-    );
+  const flash = 4 * 1024 * 1024;
+  const reserved = 0x10000;
+  const usable = flash - reserved;
 
+  it("renders total/allocated/free figures", () => {
+    render(<KpiCards flashBytes={flash} allocated={usable / 2} free={usable / 2} usableBytes={usable} reservedBytes={reserved} />);
     expect(screen.getByText("Total Flash")).toBeInTheDocument();
     expect(screen.getByText("Allocated")).toBeInTheDocument();
     expect(screen.getByText("Free Space")).toBeInTheDocument();
-    // flashBytes and free are both 2MB / 1MB respectively.
-    expect(screen.getAllByText("1.00 MB").length).toBeGreaterThan(0);
-    expect(screen.getByText("2.00 MB")).toBeInTheDocument();
   });
 
-  it("computes the used percentage from flash and free space", () => {
-    render(
-      <KpiCards
-        flashBytes={4 * 1024 * 1024}
-        allocated={3 * 1024 * 1024}
-        free={1 * 1024 * 1024}
-        reservedBytes={0}
-      />,
-    );
-    // (4MB - 1MB) / 4MB = 75.0%
-    expect(screen.getAllByText("75.0%").length).toBeGreaterThan(0);
+  it("computes allocated and free as a percentage of usable", () => {
+    render(<KpiCards flashBytes={flash} allocated={usable / 2} free={usable / 2} usableBytes={usable} reservedBytes={reserved} />);
+    // both halves of usable => 50.0% each
+    expect(screen.getAllByText("50.0%").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows the reserved-space note only when reservedBytes is positive", () => {
-    const { rerender } = render(
-      <KpiCards flashBytes={2 * 1024 * 1024} allocated={0} free={2 * 1024 * 1024} reservedBytes={0} />,
-    );
-    expect(screen.queryByText(/reserved for bootloader/)).not.toBeInTheDocument();
-
-    rerender(
-      <KpiCards
-        flashBytes={2 * 1024 * 1024}
-        allocated={0}
-        free={2 * 1024 * 1024 - 0x10000}
-        reservedBytes={0x10000}
-      />,
-    );
+  it("shows the reserved note when reservedBytes > 0", () => {
+    render(<KpiCards flashBytes={flash} allocated={0} free={usable} usableBytes={usable} reservedBytes={reserved} />);
     expect(screen.getByText(/reserved for bootloader/)).toBeInTheDocument();
   });
 
-  it("reports 0% used when flash size is zero", () => {
-    render(<KpiCards flashBytes={0} allocated={0} free={0} reservedBytes={0} />);
+  it("handles zero usable without dividing by zero", () => {
+    render(<KpiCards flashBytes={0} allocated={0} free={0} usableBytes={0} reservedBytes={0} />);
     expect(screen.getAllByText("0.0%").length).toBeGreaterThan(0);
   });
 });

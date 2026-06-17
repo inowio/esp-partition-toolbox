@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiAnchor, FiList, FiLock, FiMaximize2, FiPlus, FiShield, FiTrash2 } from "react-icons/fi";
+import { FiAnchor, FiChevronDown, FiList, FiLock, FiMaximize2, FiPlus, FiShield, FiTrash2 } from "react-icons/fi";
 import type { PartitionDraftRow, PartitionLayoutRow } from "../types";
 import {
   getDefaultSubtypeForType,
@@ -15,6 +15,25 @@ import {
   parseSizeString,
 } from "../utils/partition";
 import type { SizeUnit } from "../utils/partition";
+
+// An offset is valid when empty (auto-defaults) or a clean hex/decimal number.
+function isValidPartitionOffset(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return /^0x[0-9a-f]+$/.test(normalized) || /^\d+$/.test(normalized);
+}
+
+// Each preset is the partition-*table* offset (CONFIG_PARTITION_TABLE_OFFSET).
+// Increasing it leaves more room for the bootloader at 0x1000–<offset>.
+const PARTITION_OFFSET_PRESETS: { value: string; label: string }[] = [
+  { value: "0x8000", label: "ESP-IDF / Arduino-ESP32 default" },
+  { value: "0x9000", label: "+4 KB bootloader headroom" },
+  { value: "0xA000", label: "+8 KB bootloader headroom" },
+  { value: "0xC000", label: "Larger bootloader" },
+  { value: "0xE000", label: "Large bootloader / security features" },
+  { value: "0x10000", label: "Common preset for secure boot / flash encryption" },
+  { value: "0x20000", label: "Advanced — large reserved bootloader area" },
+];
 
 const SLIDER_MIN_BYTES = 4 * 1024;
 const SLIDER_RESOLUTION = 500;
@@ -168,6 +187,7 @@ function PartitionRow({
         <input
           value={row.name}
           maxLength={15}
+          aria-label="Partition name"
           onChange={(event) => onUpdateRow(row.id, { name: event.currentTarget.value })}
           onBlur={(event) => onUpdateRow(row.id, { name: event.currentTarget.value.trim() })}
           className="w-full rounded-md border border-slate-300 bg-transparent px-2 py-1 outline-none focus:border-sky-500 dark:border-slate-700"
@@ -443,6 +463,8 @@ function PartitionRow({
 interface PartitionTableCardProps {
   rows: PartitionLayoutRow[];
   flashBytes: number;
+  partitionOffset?: string;
+  onPartitionOffsetChange?: (value: string) => void;
   onAddRow: () => void;
   onUpdateRow: (id: string, updates: Partial<PartitionDraftRow>) => void;
   onRequestDelete: (row: PartitionDraftRow) => void;
@@ -451,6 +473,8 @@ interface PartitionTableCardProps {
 export default function PartitionTableCard({
   rows,
   flashBytes,
+  partitionOffset = "",
+  onPartitionOffsetChange = () => undefined,
   onAddRow,
   onUpdateRow,
   onRequestDelete,
@@ -458,13 +482,93 @@ export default function PartitionTableCard({
   // Advanced mode unlocks editable offsets and custom numeric types/subtypes.
   // It is purely a view preference, so it lives as local state in this card.
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  const presetsRef = useRef<HTMLLabelElement | null>(null);
+
+  // Close the offset-presets popup on outside click or Escape — the same
+  // pattern the editable-field context menu uses.
+  useEffect(() => {
+    if (!presetsOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (presetsRef.current && presetsRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setPresetsOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setPresetsOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [presetsOpen]);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Partition Table Definition</h2>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <label
+            ref={presetsRef}
+            className="relative flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800/60 text-sm text-slate-600 dark:text-slate-300"
+            title="Partition table offset (CONFIG_PARTITION_TABLE_OFFSET). Most projects use 0x8000; some configs need 0x9000 or higher."
+          >
+            <span className="font-medium">Partition Start</span>
+            <input
+              value={partitionOffset}
+              onChange={(event) => onPartitionOffsetChange(event.currentTarget.value)}
+              aria-label="Partition table offset"
+              placeholder="0x8000"
+              className={`w-28 rounded border bg-transparent px-2 py-1 font-mono text-sm outline-none focus:border-sky-500 ${
+                isValidPartitionOffset(partitionOffset)
+                  ? "border-slate-300 dark:border-slate-700"
+                  : "border-rose-400 dark:border-rose-600"
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setPresetsOpen((open) => !open)}
+              aria-label="Show common partition table offsets"
+              aria-expanded={presetsOpen}
+              aria-haspopup="menu"
+              title="Common offsets"
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <FiChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {presetsOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-1 min-w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              >
+                {PARTITION_OFFSET_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onPartitionOffsetChange(preset.value);
+                      setPresetsOpen(false);
+                    }}
+                    className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-mono text-sm font-semibold text-sky-700 dark:text-sky-300">
+                      {preset.value}
+                    </div>
+                    {preset.label && (
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {preset.label}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
           <label
             className="flex cursor-pointer items-center gap-2 text-sm select-none"
             title="Unlocks editable offsets and custom partition types"

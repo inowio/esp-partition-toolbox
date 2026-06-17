@@ -18,11 +18,11 @@ const RELEASES_URL = "https://github.com/inowio/esp-partition-toolbox/releases/l
 const COMPANY_URL = "https://inowio.in";
 
 const FEATURES = [
-  "Auto-discovers an ESP-IDF project and its sdkconfig defaults",
+  "Auto-detects ESP-IDF, PlatformIO, and Arduino projects and reads the existing table",
   "Visually edit partition name, type, subtype, and size",
   "Real-time validation of alignment, boundaries, and duplicates",
   "Proportional flash-usage map with a total / allocated / free dashboard",
-  "Saves back to the partition CSV and keeps sdkconfig entries in sync",
+  "Writes the partition CSV and syncs the platform config (sdkconfig / platformio.ini / sketch.yaml)",
 ];
 
 interface AboutModalProps {
@@ -113,7 +113,7 @@ export default function AboutModal({
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Desktop GUI for ESP-IDF partition tables
+                Desktop GUI for ESP32 partition tables
               </p>
             </div>
           </div>
@@ -130,10 +130,11 @@ export default function AboutModal({
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-            ESP Partition Toolbox loads an ESP-IDF project folder and lets you edit
-            its partition layout visually — validating ESP-IDF rules as you go — then
-            writes the result straight back to the partition CSV. No hand-editing a
-            text file and no guesswork about offsets or alignment.
+            ESP Partition Toolbox loads an ESP-IDF, PlatformIO, or Arduino project
+            folder and lets you edit its partition layout visually — validating ESP32
+            rules as you go — then writes the result straight back to the partition
+            CSV. No hand-editing a text file and no guesswork about offsets or
+            alignment.
           </p>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
@@ -153,7 +154,7 @@ export default function AboutModal({
               onClick={handleCheck}
               disabled={checkState.kind === "checking"}
               title="Check for updates"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiRefreshCcw
                 className={`h-3.5 w-3.5 ${checkState.kind === "checking" ? "animate-spin" : ""}`}

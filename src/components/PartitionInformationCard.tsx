@@ -15,9 +15,9 @@ export default function PartitionInformationCard({
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Entry for sdkconfig</h2>
+          <h2 className="text-base font-semibold">Config Preview</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Copy these entries into your sdkconfig to set the partition table.
+            Copy these entries into your platform config to point the build at this partition table.
           </p>
         </div>
 

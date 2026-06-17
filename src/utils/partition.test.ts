@@ -9,6 +9,7 @@ import {
   formatBytes,
   formatHex,
   formatSizeToPartitionUnit,
+  inferFlashSizeMb,
   maxSizeBytesForRow,
   normalizeSizeInput,
   parsePartitionCsv,
@@ -573,10 +574,17 @@ describe("calculateLayout", () => {
     expect(sizeError?.severity).toBe("blocking");
   });
 
-  it("respects custom partition offset", () => {
+  it("places the first partition one sector after the table offset", () => {
     const rows = makeRows(["64K"]);
+    // 0x9000 here is the partition-TABLE offset → first partition at 0x9000 + 0x1000.
     const layout = calculateLayout(rows, 8, "0x9000");
-    expect(layout.rows[0].offset).toBe(0x10000);
+    expect(layout.rows[0].offset).toBe(0xa000);
+  });
+
+  it("places the first partition right after a 0x8000 table (0x9000)", () => {
+    const rows = makeRows(["64K"]);
+    const layout = calculateLayout(rows, 8, "0x8000");
+    expect(layout.rows[0].offset).toBe(0x9000);
   });
 
   it("handles empty rows array", () => {
@@ -589,7 +597,7 @@ describe("calculateLayout", () => {
   it("accepts partition offset as a number", () => {
     const rows = makeRows(["64K"]);
     const layout = calculateLayout(rows, 8, 0x9000);
-    expect(layout.rows[0].offset).toBe(0x10000);
+    expect(layout.rows[0].offset).toBe(0xa000);
   });
 
   it("defaults to 0x10000 start when offset is undefined", () => {
@@ -1224,5 +1232,70 @@ describe("calculateLayout — pinned offsets", () => {
   it("treats an empty pinnedOffset as auto-packed", () => {
     const layout = calculateLayout([draftRow({ name: "a", size: "16K", pinnedOffset: "" })], 8);
     expect(layout.rows[0].offset).toBe(0x10000);
+  });
+});
+
+describe("inferFlashSizeMb", () => {
+  it("infers 4 MB for a valid 4 MB OTA table at the 0x8000 default offset", () => {
+    // Real-world regression: this table is authored to fit exactly in 4 MB. With
+    // the table at 0x8000 the first partition re-packs to 0x9000 and the layout
+    // ends at exactly 0x400000 → 4 MB (no false overflow).
+    const csv = [
+      "nvs, data, nvs, 0x9000, 0x5000,",
+      "otadata, data, ota, 0xe000, 0x2000,",
+      "app0, app, ota_0, 0x10000, 0x190000,",
+      "app1, app, ota_1, 0x1a0000, 0x190000,",
+      "spiffs, data, spiffs, 0x330000, 0xd0000,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv, "0x8000")).toBe(4);
+  });
+
+  it("returns 4 when the re-packed table ends exactly at 4 MB", () => {
+    // No offset → 0x10000 start; single app partition 0x3F0000 → end 0x400000.
+    const csv = "factory, app, factory, 0x10000, 0x3F0000,\n";
+    expect(inferFlashSizeMb(csv)).toBe(4);
+  });
+
+  it("returns 8 when the re-packed table just exceeds 4 MB", () => {
+    // 0x10000 start + 0x400000 → end 0x410000 > 4 MB.
+    const csv = "big, app, factory, 0x10000, 0x400000,\n";
+    expect(inferFlashSizeMb(csv)).toBe(8);
+  });
+
+  it("measures the re-packed layout, not literal file offsets (gaps collapse)", () => {
+    // A row pinned far away in the file is re-packed densely on load, so only the
+    // sizes drive the requirement: nvs + factory(app) + big ≈ 2.1 MB → 4 MB.
+    const csv = [
+      "nvs, data, nvs, 0x9000, 16K,",
+      "factory, app, factory, 0x10000, 1M,",
+      "big, data, fat, 0x600000, 1M,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv)).toBe(4);
+  });
+
+  it("returns 2 for a small table", () => {
+    const csv = "nvs, data, nvs, 0x9000, 16K,\n";
+    expect(inferFlashSizeMb(csv)).toBe(2);
+  });
+
+  it("returns null for comment-only content", () => {
+    expect(inferFlashSizeMb("# just a comment\n# another comment\n")).toBeNull();
+  });
+
+  it("returns null for empty content", () => {
+    expect(inferFlashSizeMb("")).toBeNull();
+  });
+
+  it("returns null when no row has a valid size", () => {
+    const csv = "bad, data, nvs, 0x9000, NOTASIZE,\n";
+    expect(inferFlashSizeMb(csv)).toBeNull();
+  });
+
+  it("ignores invalid-size rows but still sizes from the valid ones", () => {
+    const csv = [
+      "bad, data, nvs, 0x9000, NOTASIZE,",
+      "nvs, data, nvs, 0x9000, 16K,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv)).toBe(2);
   });
 });

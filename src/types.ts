@@ -42,21 +42,34 @@ export interface PartitionLayoutResult {
   reservedBytes: number;
 }
 
+export type Platform = "esp-idf" | "platformio" | "arduino";
+
+export interface ConfigTarget {
+  id: string;
+  label: string;
+}
+
 export interface LoadProjectResponse {
+  platform: Platform;
+  platformConfidence: string;
+  markers: string[];
   projectPath: string;
+  mcu: string | null;
   sdkconfigFile: string;
-  sdkconfigFiles: string[];
+  configTargets: ConfigTarget[];
+  configUpdatable: boolean;
   partitionFilename: string;
   partitionFilePath: string;
   partitionContent: string;
   partitionFileExists: boolean;
-  sdkconfigUpdated: boolean;
   partitionOffset: string;
   /** Detected from `CONFIG_ESPTOOLPY_FLASHSIZE`; null when not present. */
   flashSizeMb: number | null;
+  warnings: string[];
 }
 
 export interface SaveProjectResponse {
   partitionFilePath: string;
   sdkconfigUpdated: boolean;
+  warnings: string[];
 }

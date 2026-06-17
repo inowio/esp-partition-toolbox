@@ -26,9 +26,16 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 import usePartitionProject from "./usePartitionProject";
 
 const LOAD_RESPONSE: LoadProjectResponse = {
+  platform: "esp-idf",
+  platformConfidence: "high",
+  markers: ["CMakeLists.txt"],
   projectPath: "C:/dev/esp-project",
+  mcu: "esp32",
   sdkconfigFile: "C:/dev/esp-project/sdkconfig.defaults",
-  sdkconfigFiles: ["C:/dev/esp-project/sdkconfig.defaults"],
+  configTargets: [
+    { id: "C:/dev/esp-project/sdkconfig.defaults", label: "sdkconfig.defaults" },
+  ],
+  configUpdatable: true,
   partitionFilename: "partitions.csv",
   partitionFilePath: "C:/dev/esp-project/partitions.csv",
   partitionContent: [
@@ -38,20 +45,21 @@ const LOAD_RESPONSE: LoadProjectResponse = {
     "",
   ].join("\n"),
   partitionFileExists: true,
-  sdkconfigUpdated: false,
   partitionOffset: "0x8000",
   flashSizeMb: null,
+  warnings: [],
 };
 
 function mockInvokeRouting() {
   invokeMock.mockImplementation((command: string) => {
-    if (command === "load_esp_project") {
+    if (command === "load_project") {
       return Promise.resolve(LOAD_RESPONSE);
     }
-    if (command === "save_project_state") {
+    if (command === "save_project") {
       return Promise.resolve({
         partitionFilePath: "C:/dev/esp-project/partitions.csv",
         sdkconfigUpdated: false,
+        warnings: [],
       });
     }
     return Promise.reject(new Error(`unexpected command: ${command}`));
@@ -83,7 +91,7 @@ describe("usePartitionProject", () => {
     expect(result.current.rows).toHaveLength(3);
     expect(result.current.hasSnapshot).toBe(false);
     expect(result.current.projectPath).toBe("");
-    expect(result.current.statusMessage).toMatch(/Select an ESP-IDF project folder/);
+    expect(result.current.statusMessage).toMatch(/Select a project folder/);
   });
 
   it("updates the flash size", () => {
@@ -104,7 +112,7 @@ describe("usePartitionProject", () => {
   it("adopts the flash size detected from sdkconfig on load", async () => {
     openMock.mockResolvedValue("C:/dev/esp-project");
     invokeMock.mockImplementation((command) => {
-      if (command === "load_esp_project") {
+      if (command === "load_project") {
         return Promise.resolve({ ...LOAD_RESPONSE, flashSizeMb: 8 });
       }
       return Promise.reject(new Error(`unexpected command: ${String(command)}`));
@@ -118,6 +126,16 @@ describe("usePartitionProject", () => {
     });
 
     expect(result.current.flashSizeMb).toBe(8);
+  });
+
+  it("adopts the mcu from the load response", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.mcu).toBeNull();
+
+    await loadProjectIntoHook(result);
+
+    expect(result.current.mcu).toBe("esp32");
+    expect(result.current.platform).toBe("esp-idf");
   });
 
   it("appends an empty row with addRow", () => {
@@ -183,7 +201,7 @@ describe("usePartitionProject", () => {
     const { result } = renderHook(() => usePartitionProject());
     await loadProjectIntoHook(result);
 
-    expect(invokeMock).toHaveBeenCalledWith("load_esp_project", expect.objectContaining({
+    expect(invokeMock).toHaveBeenCalledWith("load_project", expect.objectContaining({
       projectPath: "C:/dev/esp-project",
     }));
     expect(result.current.projectPath).toBe("C:/dev/esp-project");
@@ -234,7 +252,7 @@ describe("usePartitionProject", () => {
     });
 
     expect(result.current.statusMessage).toMatch(/Fix validation errors/);
-    expect(invokeMock).not.toHaveBeenCalledWith("save_project_state", expect.anything());
+    expect(invokeMock).not.toHaveBeenCalledWith("save_project", expect.anything());
   });
 
   it("persists the partition file and snapshots on a successful save", async () => {
@@ -248,11 +266,28 @@ describe("usePartitionProject", () => {
       await result.current.saveProject();
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("save_project_state", expect.objectContaining({
-      request: expect.objectContaining({ projectPath: "C:/dev/esp-project" }),
+    expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
+      request: expect.objectContaining({
+        projectPath: "C:/dev/esp-project",
+        partitionOffset: "0x8000",
+      }),
     }));
     expect(result.current.hasUnsavedChanges).toBe(false);
     expect(result.current.toasts.some((toast) => toast.kind === "success")).toBe(true);
+  });
+
+  it("clears unsaved changes immediately after a successful save", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result);
+
+    act(() => result.current.updateRow(result.current.rows[0].id, { name: "storage" }));
+    expect(result.current.hasUnsavedChanges).toBe(true);
+
+    await act(async () => {
+      await result.current.saveProject();
+    });
+
+    expect(result.current.hasUnsavedChanges).toBe(false);
   });
 
   it("closes the project immediately when there are no unsaved changes", async () => {
@@ -360,5 +395,201 @@ describe("usePartitionProject", () => {
 
     expect(result.current.partitionInfoText).toContain('CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"');
     expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_OFFSET=0x8000");
+  });
+
+  it("passes forcePlatform to load_project when provided", async () => {
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") return Promise.resolve({ ...LOAD_RESPONSE });
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => { await result.current.loadProject("platformio"); });
+    expect(invokeMock).toHaveBeenCalledWith("load_project", expect.objectContaining({ forcePlatform: "platformio" }));
+  });
+
+  it("changePlatform re-reads the loaded folder as the new platform without a folder dialog", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result); // loads esp-idf at C:/dev/esp-project
+    expect(result.current.platform).toBe("esp-idf");
+
+    openMock.mockClear();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({ ...LOAD_RESPONSE, platform: "platformio" });
+      }
+      return Promise.reject(new Error(`unexpected: ${command}`));
+    });
+
+    await act(async () => { await result.current.changePlatform("platformio"); });
+
+    expect(openMock).not.toHaveBeenCalled(); // no folder picker
+    expect(invokeMock).toHaveBeenCalledWith(
+      "load_project",
+      expect.objectContaining({ projectPath: "C:/dev/esp-project", forcePlatform: "platformio" }),
+    );
+    expect(result.current.platform).toBe("platformio");
+  });
+
+  it("changePlatform reverts and warns when the folder isn't the chosen platform", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result); // esp-idf
+    expect(result.current.platform).toBe("esp-idf");
+
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.reject(new Error("Failed to read platformio.ini"));
+      }
+      return Promise.reject(new Error(`unexpected: ${command}`));
+    });
+
+    await act(async () => { await result.current.changePlatform("platformio"); });
+
+    expect(result.current.platform).toBe("esp-idf"); // dropdown reverts
+    expect(result.current.toasts.some(
+      (t) => t.kind === "warning" && /isn't a PlatformIO project/i.test(t.message),
+    )).toBe(true);
+  });
+
+  it("changePlatform with no project loaded just sets the platform", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.platform).toBe("esp-idf");
+    invokeMock.mockClear();
+
+    await act(async () => { await result.current.changePlatform("arduino"); });
+
+    expect(result.current.platform).toBe("arduino");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("renders a platform-specific config preview", () => {
+    const { result } = renderHook(() => usePartitionProject());
+    expect(result.current.partitionInfoText).toContain("CONFIG_PARTITION_TABLE_CUSTOM=y");
+    act(() => result.current.setPlatform("platformio"));
+    expect(result.current.partitionInfoText).toContain("board_build.partitions");
+  });
+
+  it("titles the folder dialog with the selected platform", async () => {
+    openMock.mockResolvedValue(null); // cancel — we only assert the open() args
+    const { result } = renderHook(() => usePartitionProject());
+
+    await act(async () => { await result.current.loadProject(); });
+    expect(openMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Select ESP-IDF project folder" }),
+    );
+
+    act(() => result.current.setPlatform("arduino"));
+    await act(async () => { await result.current.loadProject(); });
+    expect(openMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Select Arduino project folder" }),
+    );
+  });
+
+  it("adopts configTargets and configUpdatable from the load response", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+
+    expect(result.current.configTargets).toEqual([]);
+    expect(result.current.configUpdatable).toBe(false);
+
+    await loadProjectIntoHook(result);
+
+    expect(result.current.configTargets).toEqual([
+      { id: "C:/dev/esp-project/sdkconfig.defaults", label: "sdkconfig.defaults" },
+    ]);
+    expect(result.current.configUpdatable).toBe(true);
+  });
+
+  it("resets configTargets and configUpdatable on project close", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result);
+
+    expect(result.current.configUpdatable).toBe(true);
+
+    act(() => result.current.closeProject());
+
+    expect(result.current.configTargets).toEqual([]);
+    expect(result.current.configUpdatable).toBe(false);
+  });
+
+  // ── flash-size inference ─────────────────────────────────────────────────
+
+  it("infers flash size from the partition table when config declares none and file exists", async () => {
+    // factory ends at 0x10000 + 0x7F0000 = 0x800000 = 8 MB → inference → 8
+    const content8Mb = "factory, app, factory, 0x10000, 0x7F0000,\n";
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: null,
+          partitionFileExists: true,
+          partitionContent: content8Mb,
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    expect(result.current.flashSizeMb).toBe(8);
+    expect(result.current.toasts.some(
+      (t) => t.kind === "info" && t.message.includes("inferred"),
+    )).toBe(true);
+  });
+
+  it("does not infer flash size when the partition file does not exist", async () => {
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: null,
+          partitionFileExists: false,
+          partitionContent: "",
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    // Flash stays at default (2); no inference toast
+    expect(result.current.flashSizeMb).toBe(2);
+    expect(result.current.toasts.some(
+      (t) => t.message.includes("inferred"),
+    )).toBe(false);
+  });
+
+  it("uses config-declared flash size and does not override it with inference", async () => {
+    // Content implies 8 MB; config says 4 → config wins, no inference toast
+    const content8Mb = "factory, app, factory, 0x10000, 0x7F0000,\n";
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: 4,
+          partitionFileExists: true,
+          partitionContent: content8Mb,
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    expect(result.current.flashSizeMb).toBe(4);
+    expect(result.current.toasts.some(
+      (t) => t.message.includes("inferred"),
+    )).toBe(false);
   });
 });

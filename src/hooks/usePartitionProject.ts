@@ -3,9 +3,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
+  ConfigTarget,
   LoadProjectResponse,
   PartitionDraftRow,
   PartitionLayoutResult,
+  Platform,
   SaveProjectResponse,
   ToastMessage,
   ValidationError,
@@ -14,9 +16,12 @@ import {
   calculateLayout,
   createEmptyRow,
   defaultRowsForFlashSize,
+  inferFlashSizeMb,
   parsePartitionCsv,
   serializePartitionCsvForFlash,
 } from "../utils/partition";
+import { buildConfigPreview } from "../utils/configPreview";
+import { platformLabel } from "../constants/platformOptions";
 
 interface ProjectSnapshot {
   comments: string;
@@ -32,23 +37,6 @@ interface CloseConfirmState {
 }
 
 const TOAST_TIMEOUT_MS = 5000;
-
-function buildPartitionInfoBlock(partitionFilename: string, partitionOffset: string): string {
-  const safeFilename = (partitionFilename.trim() || "partitions.csv").replace(/"/g, '\\"');
-  const safeOffset = partitionOffset.trim() || "0x8000";
-
-  return [
-    "#",
-    "# Partition Table",
-    "#",
-    "CONFIG_PARTITION_TABLE_CUSTOM=y",
-    `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"${safeFilename}\"`,
-    `CONFIG_PARTITION_TABLE_FILENAME=\"${safeFilename}\"`,
-    `CONFIG_PARTITION_TABLE_OFFSET=${safeOffset}`,
-    "CONFIG_PARTITION_TABLE_MD5=y",
-    "# end of Partition Table",
-  ].join("\n");
-}
 
 function fallbackCopyText(text: string): boolean {
   if (typeof document === "undefined") {
@@ -82,9 +70,12 @@ function cloneRows(rows: PartitionDraftRow[]): PartitionDraftRow[] {
 
 export interface PartitionProjectState {
   isBusy: boolean;
+  platform: Platform;
+  mcu: string | null;
   projectPath: string;
   sdkconfigFile: string;
-  sdkconfigFiles: string[];
+  configTargets: ConfigTarget[];
+  configUpdatable: boolean;
   syncSdkconfig: boolean;
   partitionFilename: string;
   partitionOffset: string;
@@ -105,13 +96,16 @@ export interface PartitionProjectState {
 }
 
 export interface PartitionProjectActions {
+  setPlatform: (value: Platform) => void;
+  changePlatform: (value: Platform) => Promise<void>;
+  setMcu: (value: string | null) => void;
   setFlashSizeMb: (value: number) => void;
   setComments: (value: string) => void;
   setRowPendingDelete: (row: PartitionDraftRow | null) => void;
   setSdkconfigFile: (value: string) => void;
   setSyncSdkconfig: (value: boolean) => void;
   setPartitionOffset: (value: string) => void;
-  loadProject: () => Promise<void>;
+  loadProject: (forcePlatform?: Platform) => Promise<void>;
   saveProject: () => Promise<void>;
   closeProject: () => void;
   confirmCloseProject: () => void;
@@ -128,9 +122,12 @@ export interface PartitionProjectActions {
 function usePartitionProject(): PartitionProjectState & PartitionProjectActions {
   const [isBusy, setIsBusy] = useState(false);
 
+  const [platform, setPlatform] = useState<Platform>("esp-idf");
+  const [mcu, setMcu] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState("");
   const [sdkconfigFile, setSdkconfigFile] = useState("");
-  const [sdkconfigFiles, setSdkconfigFiles] = useState<string[]>([]);
+  const [configTargets, setConfigTargets] = useState<ConfigTarget[]>([]);
+  const [configUpdatable, setConfigUpdatable] = useState(false);
   const [syncSdkconfig, setSyncSdkconfigState] = useState(false);
   const [partitionFilename, setPartitionFilename] = useState("partitions.csv");
   const [partitionOffset, setPartitionOffset] = useState("0x8000");
@@ -142,7 +139,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   const [rows, setRows] = useState<PartitionDraftRow[]>(initialRows);
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
 
-  const [statusMessage, setStatusMessage] = useState("Select an ESP-IDF project folder to begin.");
+  const [statusMessage, setStatusMessage] = useState("Select a project folder to begin.");
   const [runtimeErrors, setRuntimeErrors] = useState<ValidationError[]>([]);
   const [rowPendingDelete, setRowPendingDelete] = useState<PartitionDraftRow | null>(null);
   const [closeConfirm, setCloseConfirm] = useState<CloseConfirmState>({ open: false });
@@ -205,11 +202,11 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
 
     return false;
-  }, [comments, flashSizeMb, partitionFilename, projectPath, rows, sdkconfigFile, snapshot]);
+  }, [comments, flashSizeMb, partitionFilename, partitionOffset, projectPath, rows, sdkconfigFile, snapshot]);
 
   const partitionInfoText = useMemo(
-    () => buildPartitionInfoBlock(partitionFilename, partitionOffset),
-    [partitionFilename, partitionOffset],
+    () => buildConfigPreview(platform, { partitionFilename, partitionOffset }),
+    [platform, partitionFilename, partitionOffset],
   );
 
   // The exact CSV that saveProject would write — kept in sync for the preview.
@@ -235,8 +232,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setSyncSdkconfigState(value);
     pushToast(
       value
-        ? "sdkconfig sync enabled. Saves will update sdkconfig partition entries."
-        : "sdkconfig sync disabled. Saves will only update the partition CSV.",
+        ? "Config sync enabled. Saves will also update the platform config file."
+        : "Config sync disabled. Saves will only update the partition CSV.",
       value ? "info" : "warning",
     );
   }
@@ -261,7 +258,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }
 
   async function copyPartitionInfo(): Promise<void> {
-    await copyToClipboard(partitionInfoText, "sdkconfig entries copied to clipboard.");
+    await copyToClipboard(partitionInfoText, "Config snippet copied to clipboard.");
   }
 
   async function copyPartitionCsv(): Promise<void> {
@@ -269,15 +266,24 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }
 
   function hydrateProjectState(response: LoadProjectResponse): void {
-    // Prefer the flash size detected from sdkconfig; fall back to the value
-    // already in the UI when the project doesn't pin one.
-    const effectiveFlashSizeMb = response.flashSizeMb ?? flashSizeMb;
+    // Prefer the flash size detected from sdkconfig; fall back to inferring
+    // it from the partition table content when a file exists; otherwise keep
+    // the value already in the UI.
+    const inferredFlashSizeMb =
+      response.flashSizeMb ??
+      (response.partitionFileExists
+        ? inferFlashSizeMb(response.partitionContent, response.partitionOffset)
+        : null);
+    const effectiveFlashSizeMb = inferredFlashSizeMb ?? flashSizeMb;
     const parsed = parsePartitionCsv(response.partitionContent, effectiveFlashSizeMb);
     const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(effectiveFlashSizeMb);
 
+    setPlatform(response.platform);
+    setMcu(response.mcu);
     setProjectPath(response.projectPath);
     setSdkconfigFile(response.sdkconfigFile);
-    setSdkconfigFiles(response.sdkconfigFiles);
+    setConfigTargets(response.configTargets);
+    setConfigUpdatable(response.configUpdatable);
     setPartitionFilename(response.partitionFilename);
     setPartitionOffset(response.partitionOffset);
     setComments(parsed.comments);
@@ -285,6 +291,15 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setRuntimeErrors(parsed.errors.length > 0 ? parsed.errors : []);
     if (response.flashSizeMb != null) {
       setFlashSizeMb(response.flashSizeMb);
+    } else if (inferredFlashSizeMb != null) {
+      setFlashSizeMb(inferredFlashSizeMb);
+    }
+
+    if (response.flashSizeMb == null && inferredFlashSizeMb != null) {
+      pushToast(
+        `Flash size set to ${inferredFlashSizeMb} MB (inferred from the partition table; not declared in config).`,
+        "info",
+      );
     }
 
     setSnapshot({
@@ -297,11 +312,11 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     });
     setCloseConfirm({ open: false });
 
-    const updateNotes: string[] = [];
-    if (response.sdkconfigUpdated) {
-      updateNotes.push("sdkconfig partition block was added");
+    if (response.warnings.length > 0) {
+      pushToast(response.warnings.join(" "), "warning");
     }
 
+    const updateNotes: string[] = [];
     if (!response.partitionFileExists) {
       updateNotes.push(`${response.partitionFilename} not found; using in-memory defaults until you save`);
     }
@@ -314,7 +329,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
   }
 
-  async function loadProject(): Promise<void> {
+  async function loadProject(forcePlatform?: Platform): Promise<void> {
     setRuntimeErrors([]);
 
     if (!isTauri()) {
@@ -330,7 +345,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
       selected = await open({
         directory: true,
         multiple: false,
-        title: "Select ESP-IDF Project Folder",
+        title: `Select ${platformLabel(platform)} project folder`,
       });
     } catch (error) {
       setRuntimeErrors([{ message: `Failed to open folder dialog: ${String(error)}`, severity: "blocking" }]);
@@ -344,10 +359,10 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
 
     setIsBusy(true);
     try {
-      const response = await invoke<LoadProjectResponse>("load_esp_project", {
+      const response = await invoke<LoadProjectResponse>("load_project", {
         projectPath: selected,
         flashSizeMb,
-        syncSdkconfig,
+        forcePlatform: forcePlatform ?? null,
       });
 
       hydrateProjectState(response);
@@ -359,12 +374,47 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     }
   }
 
+  // The Platform dropdown re-interprets the ALREADY-LOADED folder as the chosen
+  // platform — no folder picker. When no project is loaded yet, it just sets the
+  // platform used for the next Load. If the folder isn't that platform (its
+  // config file is missing) the backend errors; we keep the current platform
+  // (the controlled <select> reverts) and explain, instead of blocking.
+  async function changePlatform(next: Platform): Promise<void> {
+    if (!projectPath) {
+      setPlatform(next);
+      return;
+    }
+    if (next === platform) {
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const response = await invoke<LoadProjectResponse>("load_project", {
+        projectPath,
+        flashSizeMb,
+        forcePlatform: next,
+      });
+      hydrateProjectState(response);
+    } catch (error) {
+      pushToast(
+        `This folder isn't a ${platformLabel(next)} project — keeping ${platformLabel(platform)}. (${String(error)})`,
+        "warning",
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   function doCloseProject(): void {
     const defaults = defaultRowsForFlashSize(defaultFlash);
 
+    setPlatform("esp-idf");
+    setMcu(null);
     setProjectPath("");
     setSdkconfigFile("");
-    setSdkconfigFiles([]);
+    setConfigTargets([]);
+    setConfigUpdatable(false);
     setPartitionFilename("partitions.csv");
     setPartitionOffset("0x8000");
     setFlashSizeMb(defaultFlash);
@@ -401,7 +451,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
       setRows(defaultRowsForFlashSize(defaultFlash));
       setPartitionFilename("partitions.csv");
       setSdkconfigFile("");
-      setSdkconfigFiles([]);
       setRuntimeErrors([]);
       setStatusMessage("Reset to default partition layout.");
       return;
@@ -437,25 +486,36 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     try {
       const partitionContent = serializePartitionCsvForFlash(comments, layout.rows, flashSizeMb);
 
-      const response = await invoke<SaveProjectResponse>("save_project_state", {
+      const response = await invoke<SaveProjectResponse>("save_project", {
         request: {
+          platform,
           projectPath,
-          sdkconfigFile,
           partitionFilename,
           partitionContent,
-          syncSdkconfig,
+          partitionOffset,
+          applyConfigUpdate: syncSdkconfig,
+          configTargets: sdkconfigFile ? [sdkconfigFile] : [],
         },
       });
 
+      // Snapshot from the rows we actually serialized and wrote, re-parsed from
+      // the exact CSV sent to the backend. This keeps the snapshot in lockstep
+      // with what's on disk so hasUnsavedChanges is false immediately after save.
+      const savedRows = parsePartitionCsv(partitionContent, flashSizeMb).rows;
+      setRows(savedRows);
       setSnapshot({
         comments,
-        rows: cloneRows(rows),
+        rows: cloneRows(savedRows),
         flashSizeMb,
         partitionFilename,
         partitionOffset,
         sdkconfigFile,
       });
       setCloseConfirm({ open: false });
+
+      if (response.warnings.length > 0) {
+        pushToast(response.warnings.join(" "), "warning");
+      }
 
       pushToast(`Saved to ${response.partitionFilePath}`, "success");
       setStatusMessage("");
@@ -488,9 +548,12 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
 
   return {
     isBusy,
+    platform,
+    mcu,
     projectPath,
     sdkconfigFile,
-    sdkconfigFiles,
+    configTargets,
+    configUpdatable,
     syncSdkconfig,
     partitionFilename,
     partitionOffset,
@@ -508,6 +571,9 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     toasts,
     partitionInfoText,
     partitionCsvText,
+    setPlatform,
+    changePlatform,
+    setMcu,
     setFlashSizeMb,
     setSdkconfigFile,
     setSyncSdkconfig,

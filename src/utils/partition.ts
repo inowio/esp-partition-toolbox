@@ -4,6 +4,7 @@ import type {
   PartitionLayoutRow,
   ValidationError,
 } from "../types";
+import { FLASH_OPTIONS_MB } from "../constants/flashOptions";
 
 const SECTOR_SIZE = 0x1000;
 const APP_ALIGNMENT = 0x10000;
@@ -100,6 +101,36 @@ export function normalizeSizeInput(value: string): string {
 
 export function parseSizeToBytes(value: string): number | null {
   return parseNumericValue(value);
+}
+
+/**
+ * Infer the smallest standard flash size (MB) that fits an existing partition
+ * table. The table is measured the way the app actually lays it out — via
+ * `calculateLayout`, which re-packs offsets from the partition-table offset and
+ * 64KB-aligns app partitions — so the inferred size can never disagree with the
+ * validation the user sees. Returns null when the content has no partition rows
+ * or the table exceeds the largest known flash size. Used as a load-time
+ * fallback when the platform config declares no flash size.
+ */
+export function inferFlashSizeMb(content: string, partitionOffset?: string | number): number | null {
+  const hasRows = content.split(/\r?\n/).some((rawLine) => {
+    const line = rawLine.trim();
+    return line !== "" && !line.startsWith("#") && line.split(",").length >= 5;
+  });
+  if (!hasRows) return null;
+
+  const { rows } = parsePartitionCsv(content);
+  const largestMb = FLASH_OPTIONS_MB[FLASH_OPTIONS_MB.length - 1];
+  const layout = calculateLayout(rows, largestMb, partitionOffset);
+  // Only rows with a real allocation define the flash requirement; a table of
+  // only invalid-size rows leaves nothing to size for.
+  const maxEnd = layout.rows.reduce(
+    (max, row) => (row.sizeBytes > 0 ? Math.max(max, row.end) : max),
+    0,
+  );
+  if (maxEnd <= 0) return null;
+
+  return FLASH_OPTIONS_MB.find((mb) => mb * 1024 * 1024 >= maxEnd) ?? null;
 }
 
 export function formatHex(value: number): string {
@@ -315,8 +346,11 @@ function resolvePartitionStartOffset(partitionOffset: string | number | undefine
     return DEFAULT_PARTITION_START_OFFSET;
   }
 
-  const minimumStart = alignUp(partitionTableOffset + SECTOR_SIZE, SECTOR_SIZE);
-  return Math.max(DEFAULT_PARTITION_START_OFFSET, minimumStart);
+  // The first partition sits immediately after the one-sector partition table,
+  // matching ESP-IDF/esptool (e.g. a 0x8000 table → first partition at 0x9000).
+  // No 0x10000 floor: that wasted a sector and could push an otherwise-valid
+  // tight table past its flash boundary when offsets are re-packed on load.
+  return alignUp(partitionTableOffset + SECTOR_SIZE, SECTOR_SIZE);
 }
 
 export function calculateLayout(
@@ -351,7 +385,7 @@ export function calculateLayout(
         });
       } else if (parsed % SECTOR_SIZE !== 0) {
         errors.push({
-          message: `Partition table offset ${formatHex(parsed)} is not 4KB aligned — it will be rounded up.`,
+          message: `Partition table offset ${formatHex(parsed)} is not 4KB aligned — it will be up.`,
           severity: "warning",
         });
       }
@@ -408,7 +442,7 @@ export function calculateLayout(
     const normalizedSize = alignUp(parsedSize, SECTOR_SIZE);
     if (normalizedSize !== parsedSize) {
       errors.push({
-        message: `Size for partition ${row.name || "<unnamed>"} is not 4KB aligned. Rounded to ${formatHex(
+        message: `Size for partition ${row.name || "<unnamed>"} is not 4KB aligned. to ${formatHex(
           normalizedSize,
         )}.`,
         severity: "warning",
