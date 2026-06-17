@@ -4,7 +4,7 @@
 [![Release workflow](https://github.com/inowio/esp-partition-toolbox/actions/workflows/release.yml/badge.svg)](https://github.com/inowio/esp-partition-toolbox/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
-A desktop GUI for managing ESP32 partition tables across ESP-IDF, PlatformIO, and Arduino projects. Load an ESP32 project folder, visually edit the partition layout, validate ESP-IDF constraints in real time, and save back to CSV — all without hand-editing a text file or guessing offsets.
+A desktop GUI for managing ESP32 partition tables across ESP-IDF, PlatformIO, and Arduino projects. Load an ESP32 project folder, visually edit the partition layout, validate partition constraints in real time, and save back to CSV — all without hand-editing a text file or guessing offsets.
 
 ![ESP Partition Toolbox](public/logo.svg)
 
@@ -18,14 +18,16 @@ A desktop GUI for managing ESP32 partition tables across ESP-IDF, PlatformIO, an
 
 - **Project loading** — auto-detects ESP-IDF, PlatformIO, or Arduino projects and reads the existing partition table
 - **Multi-platform config sync** — updates `sdkconfig.defaults` (ESP-IDF) or `board_build.partitions` in `platformio.ini` (PlatformIO); for Arduino it writes `partitions.csv` to the sketch folder and sets `PartitionScheme=custom` in `sketch.yaml` when present.
+- **MCU selector** — auto-detected from the project config (`CONFIG_IDF_TARGET`, the PlatformIO board, or the Arduino FQBN) and editable when the project doesn't declare it
+- **Flash-size inference** — when no flash size is configured, the smallest standard size that fits the existing partition table is selected automatically
 - **Visual partition map** — proportional, color-coded bar of flash usage with a labelled legend
 - **Inline editing** — name, type/subtype dropdowns, size (hex / K / M, slider, fill), and the `encrypted` and `readonly` flags
 - **Advanced mode** — pin partition offsets to fixed addresses and define custom numeric partition types
-- **Real-time validation** — 4 KB / 64 KB alignment, flash-boundary overflow, offset overlaps, duplicate detection, and ESP-IDF partition rules
-- **Partition Preview** — a live, copyable view of the exact CSV that gets written, alongside the sdkconfig entries
-- **KPI dashboard** — total / allocated / free space at a glance
+- **Real-time validation** — 4 KB / 64 KB alignment, flash-boundary overflow, offset overlaps, duplicate detection, and ESP32 partition rules
+- **Partition Preview** — a live, copyable view of the exact CSV that gets written, alongside a platform-aware config snippet
+- **KPI dashboard** — total flash, plus allocated and free as a percentage of usable space
 - **Comments** — preserved as `#` lines in the partition CSV header
-- **Save / Refresh / Reset** — full round-trip with snapshot-based undo and optional `sdkconfig` sync
+- **Save / Close / Reset** — full round-trip with snapshot-based undo and optional platform config sync
 - **In-app help & updater** — a tabbed Help reference, a custom right-click menu on every field, and a silent auto-update check (with a manual recheck in the About dialog)
 - Ships as a native desktop app for Windows, macOS, and Linux
 

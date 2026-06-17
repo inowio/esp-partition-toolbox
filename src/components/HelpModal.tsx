@@ -19,7 +19,7 @@ const TABS: { id: TabId; label: string }[] = [
 const STEPS: { title: string; body: string }[] = [
   {
     title: "1. Load your project",
-    body: "Click Load Project and pick your project folder. The tool auto-detects the platform — ESP-IDF (CMakeLists.txt + sdkconfig), PlatformIO (platformio.ini), or Arduino (a sketch folder) — reads any existing partition table, and pre-fills the flash size and (for ESP-IDF) the partition table offset.",
+    body: "Click Load Project and pick your project folder. The tool auto-detects the platform — ESP-IDF (CMakeLists.txt + sdkconfig), PlatformIO (platformio.ini), or Arduino (a sketch folder) — reads any existing partition table, and pre-fills the flash size (all platforms) and, for ESP-IDF, the partition table offset.",
   },
   {
     title: "2. Set the flash size",
@@ -39,7 +39,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "6. Save or export",
-    body: "Save / Export always writes the partition CSV. Turn on Config sync to also update the platform config — sdkconfig.defaults for ESP-IDF, board_build.partitions in platformio.ini for PlatformIO. You can also copy the CSV or the config snippet and paste it manually.",
+    body: "Save / Export always writes the partition CSV. Turn on Config sync to also update the platform config — sdkconfig.defaults for ESP-IDF, board_build.partitions in platformio.ini for PlatformIO, or sketch.yaml for Arduino. You can also copy the CSV or the config snippet and paste it manually.",
   },
 ];
 
@@ -103,7 +103,7 @@ const DATA_SUBTYPES: Reference[] = [
 const CONCEPTS: { title: string; body: string }[] = [
   {
     title: "The partition table & reserved space",
-    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it. The partition-table offset (Partition Start) is editable in the Project Header — it pre-fills from CONFIG_PARTITION_TABLE_OFFSET when you load a project. 0x8000 is the ESP-IDF and Arduino-ESP32 default; bumping it (0x9000, 0xA000, …) gives the bootloader more room, and 0x10000 is a common preset when secure boot or flash encryption is enabled.",
+    body: "Flash begins with the second-stage bootloader and the partition table itself. The toolbox shows this as the grey 'Reserved' block; your partitions start right after it. The partition-table offset (Partition Start) is editable in the Partition Table card — it pre-fills from CONFIG_PARTITION_TABLE_OFFSET when you load a project. 0x8000 is the ESP-IDF and Arduino-ESP32 default; bumping it (0x9000, 0xA000, …) gives the bootloader more room, and 0x10000 is a common preset when secure boot or flash encryption is enabled.",
   },
   {
     title: "Offset & alignment",
@@ -214,7 +214,7 @@ function GettingStartedTab() {
       <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
         <span className="font-semibold text-slate-700 dark:text-slate-200">Tip:</span>{" "}
         Right-click any text field for cut, copy, paste, and select-all. The partition CSV
-        and sdkconfig entries always reflect your latest edits.
+        and config preview always reflect your latest edits.
       </div>
     </>
   );
