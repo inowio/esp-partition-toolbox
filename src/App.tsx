@@ -20,8 +20,7 @@ import VisualMapCard from "./components/VisualMapCard";
 import { checkForUpdate, installAndRelaunch } from "./api/updater";
 import type { UpdatePrompt } from "./api/updater";
 import usePartitionProject from "./hooks/usePartitionProject";
-
-const FLASH_OPTIONS_MB = [2, 4, 8, 16, 32, 64, 128, 256, 512];
+import { FLASH_OPTIONS_MB } from "./constants/flashOptions";
 
 function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(true);

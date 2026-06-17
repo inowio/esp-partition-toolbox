@@ -9,6 +9,7 @@ import {
   formatBytes,
   formatHex,
   formatSizeToPartitionUnit,
+  inferFlashSizeMb,
   maxSizeBytesForRow,
   normalizeSizeInput,
   parsePartitionCsv,
@@ -1224,5 +1225,76 @@ describe("calculateLayout — pinned offsets", () => {
   it("treats an empty pinnedOffset as auto-packed", () => {
     const layout = calculateLayout([draftRow({ name: "a", size: "16K", pinnedOffset: "" })], 8);
     expect(layout.rows[0].offset).toBe(0x10000);
+  });
+});
+
+describe("inferFlashSizeMb", () => {
+  it("returns 4 for a table whose highest partition ends at exactly 4 MB", () => {
+    // 0x10000 + 0x3F0000 = 0x400000 = 4 MB
+    const csv = "factory, app, factory, 0x10000, 0x3F0000,\n";
+    expect(inferFlashSizeMb(csv)).toBe(4);
+  });
+
+  it("returns 8 for a table that just exceeds 4 MB", () => {
+    // end = 0x410000 > 4 MB → must fit in 8 MB
+    const csv = "big, app, factory, 0x10000, 0x400000,\n";
+    expect(inferFlashSizeMb(csv)).toBe(8);
+  });
+
+  it("respects a pinned high offset with a gap (does not re-pack)", () => {
+    // Small rows pack near the start; then a partition pinned at 0x600000
+    // with size 0x100000 ends at 0x700000 = 7 MB → fits in 8 MB.
+    const csv = [
+      "nvs, data, nvs, 0x9000, 16K,",
+      "factory, app, factory, 0x10000, 1M,",
+      "big, data, fat, 0x600000, 0x100000,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv)).toBe(8);
+  });
+
+  it("parses K/M unit suffixes and hex sizes correctly", () => {
+    // 0x9000 + 16K = 0x9000 + 0x4000 = 0xD000 — fits in 2 MB
+    const csv = "nvs, data, nvs, 0x9000, 16K,\n";
+    expect(inferFlashSizeMb(csv)).toBe(2);
+  });
+
+  it("parses a K/M-suffixed offset, not just hex", () => {
+    // offset 6M + size 1M = 7 MB → fits in 8 MB. Number("6M") would be NaN,
+    // so this guards against dropping the row when the offset uses a unit.
+    const csv = "big, data, fat, 6M, 1M,\n";
+    expect(inferFlashSizeMb(csv)).toBe(8);
+  });
+
+  it("does not drop a large row when its offset is unparseable (auto-packs instead)", () => {
+    // The big row's offset is garbage; it must still count (auto-packed after
+    // the previous row) so the flash is not silently undersized.
+    const csv = [
+      "nvs, data, nvs, 0x9000, 0x6000,",
+      "factory, app, factory, oops, 0x600000,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv)).toBe(8);
+  });
+
+  it("returns null for comment-only content", () => {
+    const csv = "# just a comment\n# another comment\n";
+    expect(inferFlashSizeMb(csv)).toBeNull();
+  });
+
+  it("returns null for empty content", () => {
+    expect(inferFlashSizeMb("")).toBeNull();
+  });
+
+  it("skips rows with unparseable sizes and returns null when none are usable", () => {
+    const csv = "bad, data, nvs, 0x9000, NOTASIZE,\n";
+    expect(inferFlashSizeMb(csv)).toBeNull();
+  });
+
+  it("skips rows with unparseable sizes but counts remaining valid rows", () => {
+    // One bad row followed by a good row that ends at 0x50000 → fits in 2 MB
+    const csv = [
+      "bad, data, nvs, 0x9000, NOTASIZE,",
+      "nvs, data, nvs, 0x9000, 16K,",
+    ].join("\n");
+    expect(inferFlashSizeMb(csv)).toBe(2);
   });
 });

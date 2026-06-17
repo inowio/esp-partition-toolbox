@@ -4,6 +4,7 @@ import type {
   PartitionLayoutRow,
   ValidationError,
 } from "../types";
+import { FLASH_OPTIONS_MB } from "../constants/flashOptions";
 
 const SECTOR_SIZE = 0x1000;
 const APP_ALIGNMENT = 0x10000;
@@ -100,6 +101,43 @@ export function normalizeSizeInput(value: string): string {
 
 export function parseSizeToBytes(value: string): number | null {
   return parseNumericValue(value);
+}
+
+/**
+ * Infer the smallest standard flash size (MB) that fits an existing partition
+ * table, by reading each partition row's literal offset + size (NOT the
+ * re-packed layout). Offsets are parsed with the same grammar as sizes (hex,
+ * decimal, or K/M suffix); a blank or unparseable offset auto-packs after the
+ * previous row, so a malformed offset never silently drops the row's size from
+ * the total (which would undercount the flash). Returns null when the content
+ * has no usable rows, or when the table is larger than the biggest known flash
+ * size. Used as a load-time fallback when the platform config declares no flash
+ * size.
+ */
+export function inferFlashSizeMb(content: string): number | null {
+  let cursor = DEFAULT_PARTITION_START_OFFSET;
+  let maxEnd = 0;
+  let sawRow = false;
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const cells = line.split(",").map((c) => c.trim());
+    if (cells.length < 5) continue;
+    const sizeBytes = parseSizeToBytes(normalizeSizeInput(cells[4] ?? ""));
+    if (sizeBytes == null || sizeBytes <= 0) continue; // skip rows whose size can't be parsed
+    // Offset may be hex ("0x9000"), decimal, or K/M-suffixed. A blank or
+    // unparseable offset auto-packs after the previous row so the row's size
+    // still contributes to the total — inference can round up, never undercount.
+    const parsedOffset = parseNumericValue(cells[3] ?? "");
+    const offset = parsedOffset != null && parsedOffset >= 0 ? parsedOffset : cursor;
+    const end = offset + sizeBytes;
+    cursor = end;
+    if (end > maxEnd) maxEnd = end;
+    sawRow = true;
+  }
+  if (!sawRow || maxEnd <= 0) return null;
+  const fit = FLASH_OPTIONS_MB.find((mb) => mb * 1024 * 1024 >= maxEnd);
+  return fit ?? null;
 }
 
 export function formatHex(value: number): string {

@@ -456,4 +456,86 @@ describe("usePartitionProject", () => {
     expect(result.current.configTargets).toEqual([]);
     expect(result.current.configUpdatable).toBe(false);
   });
+
+  // ── flash-size inference ─────────────────────────────────────────────────
+
+  it("infers flash size from the partition table when config declares none and file exists", async () => {
+    // factory ends at 0x10000 + 0x7F0000 = 0x800000 = 8 MB → inference → 8
+    const content8Mb = "factory, app, factory, 0x10000, 0x7F0000,\n";
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: null,
+          partitionFileExists: true,
+          partitionContent: content8Mb,
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    expect(result.current.flashSizeMb).toBe(8);
+    expect(result.current.toasts.some(
+      (t) => t.kind === "info" && t.message.includes("inferred"),
+    )).toBe(true);
+  });
+
+  it("does not infer flash size when the partition file does not exist", async () => {
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: null,
+          partitionFileExists: false,
+          partitionContent: "",
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    // Flash stays at default (2); no inference toast
+    expect(result.current.flashSizeMb).toBe(2);
+    expect(result.current.toasts.some(
+      (t) => t.message.includes("inferred"),
+    )).toBe(false);
+  });
+
+  it("uses config-declared flash size and does not override it with inference", async () => {
+    // Content implies 8 MB; config says 4 → config wins, no inference toast
+    const content8Mb = "factory, app, factory, 0x10000, 0x7F0000,\n";
+    openMock.mockResolvedValue("C:/dev/esp-project");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "load_project") {
+        return Promise.resolve({
+          ...LOAD_RESPONSE,
+          flashSizeMb: 4,
+          partitionFileExists: true,
+          partitionContent: content8Mb,
+        });
+      }
+      return Promise.reject(new Error(`unexpected: ${String(command)}`));
+    });
+
+    const { result } = renderHook(() => usePartitionProject());
+    await act(async () => {
+      await result.current.loadProject();
+    });
+
+    expect(result.current.flashSizeMb).toBe(4);
+    expect(result.current.toasts.some(
+      (t) => t.message.includes("inferred"),
+    )).toBe(false);
+  });
 });

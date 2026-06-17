@@ -16,6 +16,7 @@ import {
   calculateLayout,
   createEmptyRow,
   defaultRowsForFlashSize,
+  inferFlashSizeMb,
   parsePartitionCsv,
   serializePartitionCsvForFlash,
 } from "../utils/partition";
@@ -264,9 +265,13 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }
 
   function hydrateProjectState(response: LoadProjectResponse): void {
-    // Prefer the flash size detected from sdkconfig; fall back to the value
-    // already in the UI when the project doesn't pin one.
-    const effectiveFlashSizeMb = response.flashSizeMb ?? flashSizeMb;
+    // Prefer the flash size detected from sdkconfig; fall back to inferring
+    // it from the partition table content when a file exists; otherwise keep
+    // the value already in the UI.
+    const inferredFlashSizeMb =
+      response.flashSizeMb ??
+      (response.partitionFileExists ? inferFlashSizeMb(response.partitionContent) : null);
+    const effectiveFlashSizeMb = inferredFlashSizeMb ?? flashSizeMb;
     const parsed = parsePartitionCsv(response.partitionContent, effectiveFlashSizeMb);
     const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(effectiveFlashSizeMb);
 
@@ -283,6 +288,15 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setRuntimeErrors(parsed.errors.length > 0 ? parsed.errors : []);
     if (response.flashSizeMb != null) {
       setFlashSizeMb(response.flashSizeMb);
+    } else if (inferredFlashSizeMb != null) {
+      setFlashSizeMb(inferredFlashSizeMb);
+    }
+
+    if (response.flashSizeMb == null && inferredFlashSizeMb != null) {
+      pushToast(
+        `Flash size set to ${inferredFlashSizeMb} MB (inferred from the partition table; not declared in config).`,
+        "info",
+      );
     }
 
     setSnapshot({
