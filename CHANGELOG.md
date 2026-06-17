@@ -4,6 +4,9 @@ All notable changes to this project are tracked here following [Keep a Changelog
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.3.0] - 2026-06-17
 ### Added
 - **Multi-platform project support.** Project loading now auto-detects
   **ESP-IDF**, **PlatformIO**, and **Arduino** projects and reads the existing

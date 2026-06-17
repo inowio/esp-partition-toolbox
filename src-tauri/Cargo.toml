@@ -1,6 +1,6 @@
 [package]
 name = "esp-partition-toolbox"
-version = "0.2.0"
+version = "0.3.0"
 description = "GUI to manage ESP-IDF partition tables"
 authors = ["Inowio Technologies LLP"]
 edition = "2021"
