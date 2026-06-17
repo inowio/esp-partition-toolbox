@@ -32,7 +32,6 @@ const LOAD_RESPONSE: LoadProjectResponse = {
   projectPath: "C:/dev/esp-project",
   mcu: "esp32",
   sdkconfigFile: "C:/dev/esp-project/sdkconfig.defaults",
-  sdkconfigFiles: ["C:/dev/esp-project/sdkconfig.defaults"],
   configTargets: [
     { id: "C:/dev/esp-project/sdkconfig.defaults", label: "sdkconfig.defaults" },
   ],

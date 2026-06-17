@@ -41,6 +41,7 @@ function arduinoBlock({ partitionFilename }: ConfigPreviewParams): string {
   const file = safeFilename(partitionFilename);
   return [
     `; Place ${file} in the sketch folder.`,
+    "; If sketch.yaml exists, enable Config sync to set PartitionScheme=custom there.",
     '; Arduino IDE: Tools -> Partition Scheme -> "Custom" (or "Huge App").',
     "; Then do a clean rebuild so the new layout is picked up.",
   ].join("\n");

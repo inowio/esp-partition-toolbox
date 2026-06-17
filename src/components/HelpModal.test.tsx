@@ -22,6 +22,7 @@ describe("HelpModal", () => {
     expect(screen.getByText(/board_build\.partitions/)).toBeInTheDocument();
     expect(screen.getByText("ESP-IDF")).toBeInTheDocument();
     expect(screen.getByText("Arduino")).toBeInTheDocument();
+    expect(screen.getByText(/PartitionScheme=custom/i)).toBeInTheDocument();
   });
 
   it("switches to the Partition Types tab", () => {

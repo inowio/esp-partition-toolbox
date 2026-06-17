@@ -90,7 +90,7 @@ export default function TargetOutputCard(props: TargetOutputCardProps) {
             </>
           ) : (
             <span className="text-[10px] text-amber-600 dark:text-amber-300">
-              Config writing is available in a later update — the partition CSV is still exported.
+              Bare sketch — no committable config. The CSV is written to the sketch folder; set Tools → Partition Scheme → "Custom" and do a clean rebuild.
             </span>
           )}
         </div>

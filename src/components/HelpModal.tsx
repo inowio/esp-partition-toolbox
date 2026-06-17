@@ -186,9 +186,11 @@ function PlatformsTab() {
       <div>
         <SubHeading>Arduino</SubHeading>
         <p className="mt-1">
-          Arduino sketch folders are detected, but full Arduino support is not available yet.
-          When it arrives, Save / Export will write <Code>partitions.csv</Code> into the sketch
-          folder and you'll select Tools → Partition Scheme → "Custom" in the Arduino IDE.
+          Detected from a sketch folder. Save / Export writes <Code>partitions.csv</Code> into the
+          sketch folder. If a <Code>sketch.yaml</Code> exists, Config sync sets{" "}
+          <Code>PartitionScheme=custom</Code> on its FQBN(s); MCU and flash size are read from that
+          FQBN. For a bare sketch, set Tools → Partition Scheme → "Custom" in the Arduino IDE and do
+          a clean rebuild so the new layout is used.
         </p>
       </div>
     </div>

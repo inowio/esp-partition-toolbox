@@ -17,7 +17,7 @@ A desktop GUI for managing ESP32 partition tables across ESP-IDF, PlatformIO, an
 ## Highlights
 
 - **Project loading** — auto-detects ESP-IDF, PlatformIO, or Arduino projects and reads the existing partition table
-- **Multi-platform config sync** — updates `sdkconfig.defaults` (ESP-IDF) or `board_build.partitions` in `platformio.ini` (PlatformIO); Arduino (write `partitions.csv` to the sketch folder) is planned
+- **Multi-platform config sync** — updates `sdkconfig.defaults` (ESP-IDF) or `board_build.partitions` in `platformio.ini` (PlatformIO); for Arduino it writes `partitions.csv` to the sketch folder and sets `PartitionScheme=custom` in `sketch.yaml` when present.
 - **Visual partition map** — proportional, color-coded bar of flash usage with a labelled legend
 - **Inline editing** — name, type/subtype dropdowns, size (hex / K / M, slider, fill), and the `encrypted` and `readonly` flags
 - **Advanced mode** — pin partition offsets to fixed addresses and define custom numeric partition types
@@ -122,7 +122,7 @@ esp-partition-toolbox/
 
 ## Troubleshooting
 
-- **Project won't load** — the folder must be an ESP32 project: an ESP-IDF project needs a `CMakeLists.txt` and at least one `sdkconfig.defaults` (or `sdkconfig.defaults.*`) file; a PlatformIO project needs `platformio.ini` with at least one `[env:…]` section.
+- **Project won't load** — the folder must be an ESP32 project: an ESP-IDF project needs a `CMakeLists.txt` and at least one `sdkconfig.defaults` (or `sdkconfig.defaults.*`) file; a PlatformIO project needs `platformio.ini` with at least one `[env:…]` section; an Arduino project needs a sketch folder containing a `.ino` sketch.
 - **Partition file missing** — if no partition CSV exists yet, the app generates a sensible default layout in memory; it is written to disk only when you save.
 - **Validation errors block saving** — fix the blocking errors listed in the validation panel; warnings do not block a save.
 - **Build failures** — reinstall dependencies (`npm ci`), update the Rust toolchain, and ensure the platform build tools listed under Requirements are present.

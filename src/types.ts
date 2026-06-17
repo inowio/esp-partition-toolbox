@@ -56,7 +56,6 @@ export interface LoadProjectResponse {
   projectPath: string;
   mcu: string | null;
   sdkconfigFile: string;
-  sdkconfigFiles: string[];
   configTargets: ConfigTarget[];
   configUpdatable: boolean;
   partitionFilename: string;

@@ -1,33 +1,13 @@
 use std::path::Path;
 
 use crate::platform::{
-    ConfigTarget, ConfigUpdateParams, ConfigUpdateResult, Platform, ProjectAdapter, ProjectContext,
+    mcu_from_board, ConfigTarget, ConfigUpdateParams, ConfigUpdateResult, Platform, ProjectAdapter,
+    ProjectContext,
 };
 use crate::platform::ini;
 use crate::{generate_default_partition_csv, parse_flash_size_string};
 
 pub struct PlatformIoAdapter;
-
-/// Light board-id → chip heuristic (used only when board_build.mcu is absent).
-fn mcu_from_board(board: &str) -> Option<String> {
-    let b = board.to_ascii_lowercase();
-    for (needle, chip) in [
-        ("esp32s3", "esp32s3"), ("esp32-s3", "esp32s3"),
-        ("esp32s2", "esp32s2"), ("esp32-s2", "esp32s2"),
-        ("esp32c6", "esp32c6"), ("esp32-c6", "esp32c6"),
-        ("esp32c3", "esp32c3"), ("esp32-c3", "esp32c3"),
-        ("esp32c2", "esp32c2"), ("esp32-c2", "esp32c2"),
-        ("esp32h2", "esp32h2"), ("esp32-h2", "esp32h2"),
-    ] {
-        if b.contains(needle) {
-            return Some(chip.to_string());
-        }
-    }
-    if b.contains("esp32") {
-        return Some("esp32".to_string());
-    }
-    None
-}
 
 fn basename(path: &str) -> String {
     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
@@ -194,13 +174,6 @@ mod tests {
         assert!(!ctx.partition_file_exists);
         assert!(ctx.partition_content.contains("factory, app, factory"));
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn mcu_from_board_maps_common_boards() {
-        assert_eq!(mcu_from_board("esp32-c6-devkitc-1").as_deref(), Some("esp32c6"));
-        assert_eq!(mcu_from_board("esp32dev").as_deref(), Some("esp32"));
-        assert_eq!(mcu_from_board("nano33ble"), None);
     }
 
     use crate::platform::ConfigUpdateParams;

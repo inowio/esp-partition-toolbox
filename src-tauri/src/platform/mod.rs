@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::Path;
 
+pub mod arduino;
 pub mod esp_idf;
 pub mod ini;
 pub mod platformio;
@@ -166,14 +167,40 @@ pub trait ProjectAdapter {
     fn apply_config_update(&self, project_dir: &Path, params: &ConfigUpdateParams) -> Result<ConfigUpdateResult, String>;
 }
 
-/// Resolve the adapter for a platform. P1 only implements ESP-IDF; the others
-/// return an explicit "not yet supported" error so the commands fail cleanly.
+/// Resolve the read/write adapter for a platform. All three platforms
+/// (ESP-IDF, PlatformIO, Arduino) are supported; the `Result` is retained so
+/// callers stay forward-compatible if a future platform needs to fail cleanly.
 pub fn adapter_for(platform: Platform) -> Result<Box<dyn ProjectAdapter>, String> {
     match platform {
         Platform::EspIdf => Ok(Box::new(esp_idf::EspIdfAdapter)),
         Platform::PlatformIo => Ok(Box::new(platformio::PlatformIoAdapter)),
-        Platform::Arduino => Err("Arduino support is not available yet.".to_string()),
+        Platform::Arduino => Ok(Box::new(arduino::ArduinoAdapter)),
     }
+}
+
+/// Light board/chip-id → normalized MCU id heuristic, shared by the PlatformIO
+/// (board id) and Arduino (FQBN board segment) adapters. Returns the dropdown's
+/// chip id, or None when nothing ESP32-like is recognized.
+pub(crate) fn mcu_from_board(board: &str) -> Option<String> {
+    let b = board.to_ascii_lowercase();
+    for (needle, chip) in [
+        ("esp32s3", "esp32s3"), ("esp32-s3", "esp32s3"),
+        ("esp32s2", "esp32s2"), ("esp32-s2", "esp32s2"),
+        ("esp32c6", "esp32c6"), ("esp32-c6", "esp32c6"),
+        ("esp32c5", "esp32c5"), ("esp32-c5", "esp32c5"),
+        ("esp32c3", "esp32c3"), ("esp32-c3", "esp32c3"),
+        ("esp32c2", "esp32c2"), ("esp32-c2", "esp32c2"),
+        ("esp32h2", "esp32h2"), ("esp32-h2", "esp32h2"),
+        ("esp32p4", "esp32p4"), ("esp32-p4", "esp32p4"),
+    ] {
+        if b.contains(needle) {
+            return Some(chip.to_string());
+        }
+    }
+    if b.contains("esp32") {
+        return Some("esp32".to_string());
+    }
+    None
 }
 
 #[cfg(test)]
@@ -234,6 +261,15 @@ mod tests {
         fs::write(d.join("README.md"), "hi").unwrap();
         assert!(detect_platform(&d).is_err());
         fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn mcu_from_board_maps_common_boards() {
+        assert_eq!(mcu_from_board("esp32-c6-devkitc-1").as_deref(), Some("esp32c6"));
+        assert_eq!(mcu_from_board("esp32-c5-devkitc-1").as_deref(), Some("esp32c5"));
+        assert_eq!(mcu_from_board("esp32-p4-function-ev").as_deref(), Some("esp32p4"));
+        assert_eq!(mcu_from_board("esp32dev").as_deref(), Some("esp32"));
+        assert_eq!(mcu_from_board("nano33ble"), None);
     }
 
     #[test]

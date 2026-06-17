@@ -18,7 +18,6 @@ struct LoadProjectResponse {
     project_path: String,
     mcu: Option<String>,
     sdkconfig_file: String,
-    sdkconfig_files: Vec<String>,
     config_targets: Vec<crate::platform::ConfigTarget>,
     config_updatable: bool,
     partition_filename: String,
@@ -106,7 +105,6 @@ fn load_project(
             .first()
             .map(|t| t.id.clone())
             .unwrap_or_default(),
-        sdkconfig_files: ctx.config_targets.iter().map(|t| t.id.clone()).collect(),
         config_targets: ctx.config_targets,
         config_updatable: ctx.config_updatable,
         partition_filename: ctx.partition_filename,
@@ -333,7 +331,11 @@ fn select_sdkconfig_defaults_file(sdkconfig_files: &[PathBuf]) -> Result<PathBuf
 
 pub(crate) fn parse_flash_size_string(value: &str) -> Option<u32> {
     let trimmed = value.trim().to_ascii_uppercase();
-    let stripped = trimmed.strip_suffix("MB").unwrap_or(trimmed.as_str()).trim();
+    let stripped = trimmed
+        .strip_suffix("MB")
+        .or_else(|| trimmed.strip_suffix('M'))
+        .unwrap_or(trimmed.as_str())
+        .trim();
     stripped.parse::<u32>().ok().filter(|&v| v > 0)
 }
 
@@ -1174,6 +1176,9 @@ mod tests {
         assert_eq!(parse_flash_size_string("garbage"), None);
         assert_eq!(parse_flash_size_string(""), None);
         assert_eq!(parse_flash_size_string("0MB"), None);
+        assert_eq!(parse_flash_size_string("8M"), Some(8));
+        assert_eq!(parse_flash_size_string("16m"), Some(16));
+        assert_eq!(parse_flash_size_string("M"), None);
     }
 
     #[test]
@@ -1400,6 +1405,49 @@ mod tests {
         assert!(fs::read_to_string(dir.join("partitions.csv")).unwrap().contains("nvs, data, nvs"));
         let ini = fs::read_to_string(dir.join("platformio.ini")).unwrap();
         assert!(ini.contains("board_build.partitions = partitions.csv"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_project_writes_partition_csv_for_bare_arduino_sketch() {
+        let dir = unique_temp_dir("ard_bare_save");
+        write_file(&dir, "Blink.ino", "void setup(){}\n");
+
+        let request = SaveProjectRequest {
+            platform: "arduino".to_string(),
+            project_path: dir.to_string_lossy().to_string(),
+            partition_filename: "partitions.csv".to_string(),
+            partition_content: "nvs, data, nvs, 0x9000, 16K,\n".to_string(),
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: false,
+            config_targets: vec![],
+        };
+        let response = save_project(request).expect("save");
+        assert!(!response.sdkconfig_updated);
+        assert!(fs::read_to_string(dir.join("partitions.csv")).unwrap().contains("nvs, data, nvs"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_project_updates_sketch_yaml_when_requested() {
+        let dir = unique_temp_dir("ard_yaml_save");
+        write_file(&dir, "Blink.ino", "void setup(){}\n");
+        write_file(&dir, "sketch.yaml", "default_fqbn: esp32:esp32:esp32s3:FlashSize=8M\n");
+
+        let request = SaveProjectRequest {
+            platform: "arduino".to_string(),
+            project_path: dir.to_string_lossy().to_string(),
+            partition_filename: "partitions.csv".to_string(),
+            partition_content: "nvs, data, nvs, 0x9000, 16K,\n".to_string(),
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: true,
+            config_targets: vec!["sketch.yaml".to_string()],
+        };
+        let response = save_project(request).expect("save");
+        assert!(response.sdkconfig_updated);
+        let yaml = fs::read_to_string(dir.join("sketch.yaml")).unwrap();
+        assert!(yaml.contains("PartitionScheme=custom"));
+        assert!(yaml.contains("FlashSize=8M")); // flash preserved (D3)
         fs::remove_dir_all(&dir).ok();
     }
 }

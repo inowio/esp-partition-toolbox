@@ -48,9 +48,9 @@ describe("TargetOutputCard", () => {
     expect(picker).toBeEnabled();
     expect(screen.getByRole("option", { name: "sdkconfig.defaults" })).toBeInTheDocument();
   });
-  it("shows an 'available soon' note when configUpdatable is false", () => {
+  it("shows a bare-sketch guidance note when configUpdatable is false", () => {
     render(<TargetOutputCard {...baseProps({ configUpdatable: false })} />);
-    expect(screen.getByText(/available in a later update/i)).toBeInTheDocument();
+    expect(screen.getByText(/no committable config/i)).toBeInTheDocument();
   });
   it("toggles sync", () => {
     const onSyncSdkconfigChange = vi.fn();
@@ -74,12 +74,13 @@ describe("TargetOutputCard", () => {
     expect(screen.getByRole("option", { name: "esp32s3" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "esp32c3" })).toBeInTheDocument();
   });
-  it("shows 'available in a later update' note for Arduino (configUpdatable false)", () => {
+  it("shows bare-sketch guidance note for Arduino (configUpdatable false)", () => {
     render(<TargetOutputCard {...baseProps({
       platform: "arduino",
       configUpdatable: false,
     })} />);
-    expect(screen.getByText(/available in a later update/i)).toBeInTheDocument();
+    expect(screen.getByText(/no committable config/i)).toBeInTheDocument();
+    expect(screen.getByText(/Partition Scheme/i)).toBeInTheDocument();
     expect(screen.queryByTitle(/Select a config target/)).not.toBeInTheDocument();
   });
 });

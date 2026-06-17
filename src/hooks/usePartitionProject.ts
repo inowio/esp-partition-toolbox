@@ -73,7 +73,6 @@ export interface PartitionProjectState {
   mcu: string | null;
   projectPath: string;
   sdkconfigFile: string;
-  sdkconfigFiles: string[];
   configTargets: ConfigTarget[];
   configUpdatable: boolean;
   syncSdkconfig: boolean;
@@ -125,7 +124,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   const [mcu, setMcu] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState("");
   const [sdkconfigFile, setSdkconfigFile] = useState("");
-  const [sdkconfigFiles, setSdkconfigFiles] = useState<string[]>([]);
   const [configTargets, setConfigTargets] = useState<ConfigTarget[]>([]);
   const [configUpdatable, setConfigUpdatable] = useState(false);
   const [syncSdkconfig, setSyncSdkconfigState] = useState(false);
@@ -232,8 +230,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setSyncSdkconfigState(value);
     pushToast(
       value
-        ? "sdkconfig sync enabled. Saves will update sdkconfig partition entries."
-        : "sdkconfig sync disabled. Saves will only update the partition CSV.",
+        ? "Config sync enabled. Saves will also update the platform config file."
+        : "Config sync disabled. Saves will only update the partition CSV.",
       value ? "info" : "warning",
     );
   }
@@ -276,7 +274,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setMcu(response.mcu);
     setProjectPath(response.projectPath);
     setSdkconfigFile(response.sdkconfigFile);
-    setSdkconfigFiles(response.sdkconfigFiles);
     setConfigTargets(response.configTargets);
     setConfigUpdatable(response.configUpdatable);
     setPartitionFilename(response.partitionFilename);
@@ -367,7 +364,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setMcu(null);
     setProjectPath("");
     setSdkconfigFile("");
-    setSdkconfigFiles([]);
     setConfigTargets([]);
     setConfigUpdatable(false);
     setPartitionFilename("partitions.csv");
@@ -406,7 +402,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
       setRows(defaultRowsForFlashSize(defaultFlash));
       setPartitionFilename("partitions.csv");
       setSdkconfigFile("");
-      setSdkconfigFiles([]);
       setRuntimeErrors([]);
       setStatusMessage("Reset to default partition layout.");
       return;
@@ -508,7 +503,6 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     mcu,
     projectPath,
     sdkconfigFile,
-    sdkconfigFiles,
     configTargets,
     configUpdatable,
     syncSdkconfig,
