@@ -270,7 +270,9 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     // the value already in the UI.
     const inferredFlashSizeMb =
       response.flashSizeMb ??
-      (response.partitionFileExists ? inferFlashSizeMb(response.partitionContent) : null);
+      (response.partitionFileExists
+        ? inferFlashSizeMb(response.partitionContent, response.partitionOffset)
+        : null);
     const effectiveFlashSizeMb = inferredFlashSizeMb ?? flashSizeMb;
     const parsed = parsePartitionCsv(response.partitionContent, effectiveFlashSizeMb);
     const nextRows = parsed.rows.length > 0 ? parsed.rows : defaultRowsForFlashSize(effectiveFlashSizeMb);

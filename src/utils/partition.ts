@@ -105,39 +105,32 @@ export function parseSizeToBytes(value: string): number | null {
 
 /**
  * Infer the smallest standard flash size (MB) that fits an existing partition
- * table, by reading each partition row's literal offset + size (NOT the
- * re-packed layout). Offsets are parsed with the same grammar as sizes (hex,
- * decimal, or K/M suffix); a blank or unparseable offset auto-packs after the
- * previous row, so a malformed offset never silently drops the row's size from
- * the total (which would undercount the flash). Returns null when the content
- * has no usable rows, or when the table is larger than the biggest known flash
- * size. Used as a load-time fallback when the platform config declares no flash
- * size.
+ * table. The table is measured the way the app actually lays it out — via
+ * `calculateLayout`, which re-packs offsets from the partition-table offset and
+ * 64KB-aligns app partitions — so the inferred size can never disagree with the
+ * validation the user sees. Returns null when the content has no partition rows
+ * or the table exceeds the largest known flash size. Used as a load-time
+ * fallback when the platform config declares no flash size.
  */
-export function inferFlashSizeMb(content: string): number | null {
-  let cursor = DEFAULT_PARTITION_START_OFFSET;
-  let maxEnd = 0;
-  let sawRow = false;
-  for (const rawLine of content.split(/\r?\n/)) {
+export function inferFlashSizeMb(content: string, partitionOffset?: string | number): number | null {
+  const hasRows = content.split(/\r?\n/).some((rawLine) => {
     const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const cells = line.split(",").map((c) => c.trim());
-    if (cells.length < 5) continue;
-    const sizeBytes = parseSizeToBytes(normalizeSizeInput(cells[4] ?? ""));
-    if (sizeBytes == null || sizeBytes <= 0) continue; // skip rows whose size can't be parsed
-    // Offset may be hex ("0x9000"), decimal, or K/M-suffixed. A blank or
-    // unparseable offset auto-packs after the previous row so the row's size
-    // still contributes to the total — inference can round up, never undercount.
-    const parsedOffset = parseNumericValue(cells[3] ?? "");
-    const offset = parsedOffset != null && parsedOffset >= 0 ? parsedOffset : cursor;
-    const end = offset + sizeBytes;
-    cursor = end;
-    if (end > maxEnd) maxEnd = end;
-    sawRow = true;
-  }
-  if (!sawRow || maxEnd <= 0) return null;
-  const fit = FLASH_OPTIONS_MB.find((mb) => mb * 1024 * 1024 >= maxEnd);
-  return fit ?? null;
+    return line !== "" && !line.startsWith("#") && line.split(",").length >= 5;
+  });
+  if (!hasRows) return null;
+
+  const { rows } = parsePartitionCsv(content);
+  const largestMb = FLASH_OPTIONS_MB[FLASH_OPTIONS_MB.length - 1];
+  const layout = calculateLayout(rows, largestMb, partitionOffset);
+  // Only rows with a real allocation define the flash requirement; a table of
+  // only invalid-size rows leaves nothing to size for.
+  const maxEnd = layout.rows.reduce(
+    (max, row) => (row.sizeBytes > 0 ? Math.max(max, row.end) : max),
+    0,
+  );
+  if (maxEnd <= 0) return null;
+
+  return FLASH_OPTIONS_MB.find((mb) => mb * 1024 * 1024 >= maxEnd) ?? null;
 }
 
 export function formatHex(value: number): string {
@@ -353,8 +346,11 @@ function resolvePartitionStartOffset(partitionOffset: string | number | undefine
     return DEFAULT_PARTITION_START_OFFSET;
   }
 
-  const minimumStart = alignUp(partitionTableOffset + SECTOR_SIZE, SECTOR_SIZE);
-  return Math.max(DEFAULT_PARTITION_START_OFFSET, minimumStart);
+  // The first partition sits immediately after the one-sector partition table,
+  // matching ESP-IDF/esptool (e.g. a 0x8000 table → first partition at 0x9000).
+  // No 0x10000 floor: that wasted a sector and could push an otherwise-valid
+  // tight table past its flash boundary when offsets are re-packed on load.
+  return alignUp(partitionTableOffset + SECTOR_SIZE, SECTOR_SIZE);
 }
 
 export function calculateLayout(
