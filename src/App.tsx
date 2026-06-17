@@ -116,6 +116,22 @@ function App() {
     };
   }, []);
 
+  // Block the WebView's reload (F5) and caret-browsing (F7) accelerator keys —
+  // they don't belong in a desktop app. Find (F3 / Ctrl+F) is left enabled on
+  // purpose. Capture phase so we cancel before any field-level handler runs.
+  useEffect(() => {
+    function blockShortcut(event: KeyboardEvent): void {
+      if (event.key === "F5" || event.key === "F7") {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("keydown", blockShortcut, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", blockShortcut, { capture: true });
+    };
+  }, []);
+
   function toggleTheme(): void {
     setIsDarkTheme((currentTheme) => !currentTheme);
   }

@@ -38,6 +38,8 @@ All notable changes to this project are tracked here following [Keep a Changelog
 - **KPI dashboard:** Allocated and Free are now shown as a percentage of
   *usable* flash (excluding the reserved bootloader / partition-table region).
 - Help & README updated to cover all three platforms.
+- Disabled the WebView reload (**F5**) and caret-browsing (**F7**) accelerator
+  keys; find (**F3** / **Ctrl+F**) is left enabled.
 
 ### Fixed
 - **First partition placement.** The first partition now starts immediately
@@ -55,6 +57,10 @@ All notable changes to this project are tracked here following [Keep a Changelog
 - **ESP-IDF:** enabling a custom partition table now also turns off the
   conflicting built-in options (`SINGLE_APP` / `SINGLE_APP_LARGE` / `TWO_OTA`)
   so the custom table isn't ignored by the build.
+- **Platform dropdown** on a loaded project now re-reads the *same* folder as
+  the chosen platform instead of opening a folder picker (which also showed a
+  stale title). If the folder isn't that platform, the dropdown reverts and a
+  brief notice explains why.
 
 ## [0.2.0] - 2026-06-04
 
