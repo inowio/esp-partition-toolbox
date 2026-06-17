@@ -13,7 +13,8 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     projectPath: "C:/dev/esp",
     syncSdkconfig: false,
     sdkconfigFile: "C:/dev/esp/sdkconfig.defaults",
-    sdkconfigFiles: ["C:/dev/esp/sdkconfig.defaults"],
+    configTargets: [{ id: "C:/dev/esp/sdkconfig.defaults", label: "sdkconfig.defaults" }],
+    configUpdatable: true,
     isBusy: false,
     onPlatformChange: () => undefined,
     onMcuChange: () => undefined,
@@ -43,10 +44,12 @@ describe("TargetOutputCard", () => {
   });
   it("shows the sdkconfig file picker for ESP-IDF when sync is on", () => {
     render(<TargetOutputCard {...baseProps({ syncSdkconfig: true })} />);
-    expect(screen.getByTitle(/Select a config target/)).toBeEnabled();
+    const picker = screen.getByTitle(/Select a config target/);
+    expect(picker).toBeEnabled();
+    expect(screen.getByRole("option", { name: "sdkconfig.defaults" })).toBeInTheDocument();
   });
-  it("shows an 'available soon' note when forcing an unsupported platform", () => {
-    render(<TargetOutputCard {...baseProps({ platform: "platformio" })} />);
+  it("shows an 'available soon' note when configUpdatable is false", () => {
+    render(<TargetOutputCard {...baseProps({ configUpdatable: false })} />);
     expect(screen.getByText(/available in a later update/i)).toBeInTheDocument();
   });
   it("toggles sync", () => {
@@ -54,5 +57,29 @@ describe("TargetOutputCard", () => {
     render(<TargetOutputCard {...baseProps({ onSyncSdkconfigChange })} />);
     fireEvent.click(screen.getByRole("checkbox"));
     expect(onSyncSdkconfigChange).toHaveBeenCalledWith(true);
+  });
+  it("shows PlatformIO env picker enabled when configUpdatable and syncSdkconfig are true", () => {
+    render(<TargetOutputCard {...baseProps({
+      platform: "platformio",
+      configUpdatable: true,
+      configTargets: [
+        { id: "env:esp32s3", label: "esp32s3" },
+        { id: "env:esp32c3", label: "esp32c3" },
+      ],
+      syncSdkconfig: true,
+      sdkconfigFile: "env:esp32s3",
+    })} />);
+    const picker = screen.getByTitle(/Select a config target/);
+    expect(picker).toBeEnabled();
+    expect(screen.getByRole("option", { name: "esp32s3" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "esp32c3" })).toBeInTheDocument();
+  });
+  it("shows 'available in a later update' note for Arduino (configUpdatable false)", () => {
+    render(<TargetOutputCard {...baseProps({
+      platform: "arduino",
+      configUpdatable: false,
+    })} />);
+    expect(screen.getByText(/available in a later update/i)).toBeInTheDocument();
+    expect(screen.queryByTitle(/Select a config target/)).not.toBeInTheDocument();
   });
 });

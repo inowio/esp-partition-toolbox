@@ -2,6 +2,8 @@ use serde::Serialize;
 use std::path::Path;
 
 pub mod esp_idf;
+pub mod ini;
+pub mod platformio;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -169,7 +171,7 @@ pub trait ProjectAdapter {
 pub fn adapter_for(platform: Platform) -> Result<Box<dyn ProjectAdapter>, String> {
     match platform {
         Platform::EspIdf => Ok(Box::new(esp_idf::EspIdfAdapter)),
-        Platform::PlatformIo => Err("PlatformIO support is not available yet.".to_string()),
+        Platform::PlatformIo => Ok(Box::new(platformio::PlatformIoAdapter)),
         Platform::Arduino => Err("Arduino support is not available yet.".to_string()),
     }
 }

@@ -11,8 +11,17 @@ describe("HelpModal", () => {
   it("opens on the Getting Started tab", () => {
     render(<HelpModal open onClose={() => undefined} />);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("1. Load your ESP-IDF project")).toBeInTheDocument();
-    expect(screen.getByText("6. Save or copy the result")).toBeInTheDocument();
+    expect(screen.getByText("1. Load your project")).toBeInTheDocument();
+    expect(screen.getByText("6. Save or export")).toBeInTheDocument();
+  });
+
+  it("switches to the Platforms tab and shows PlatformIO content", () => {
+    render(<HelpModal open onClose={() => undefined} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Platforms" }));
+    expect(screen.getByText("PlatformIO")).toBeInTheDocument();
+    expect(screen.getByText(/board_build\.partitions/)).toBeInTheDocument();
+    expect(screen.getByText("ESP-IDF")).toBeInTheDocument();
+    expect(screen.getByText("Arduino")).toBeInTheDocument();
   });
 
   it("switches to the Partition Types tab", () => {

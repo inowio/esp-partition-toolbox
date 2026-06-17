@@ -4,7 +4,7 @@
 [![Release workflow](https://github.com/inowio/esp-partition-toolbox/actions/workflows/release.yml/badge.svg)](https://github.com/inowio/esp-partition-toolbox/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
-A desktop GUI for managing ESP-IDF partition tables. Load an ESP-IDF project folder, visually edit the partition layout, validate ESP-IDF constraints in real time, and save back to CSV — all without hand-editing a text file or guessing offsets.
+A desktop GUI for managing ESP32 partition tables across ESP-IDF, PlatformIO, and Arduino projects. Load an ESP32 project folder, visually edit the partition layout, validate ESP-IDF constraints in real time, and save back to CSV — all without hand-editing a text file or guessing offsets.
 
 ![ESP Partition Toolbox](public/logo.svg)
 
@@ -16,7 +16,8 @@ A desktop GUI for managing ESP-IDF partition tables. Load an ESP-IDF project fol
 
 ## Highlights
 
-- **Project loading** — auto-discovers `sdkconfig.defaults` / `sdkconfig.defaults.*` and honors an existing `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`
+- **Project loading** — auto-detects ESP-IDF, PlatformIO, or Arduino projects and reads the existing partition table
+- **Multi-platform config sync** — updates `sdkconfig.defaults` (ESP-IDF) or `board_build.partitions` in `platformio.ini` (PlatformIO); Arduino (write `partitions.csv` to the sketch folder) is planned
 - **Visual partition map** — proportional, color-coded bar of flash usage with a labelled legend
 - **Inline editing** — name, type/subtype dropdowns, size (hex / K / M, slider, fill), and the `encrypted` and `readonly` flags
 - **Advanced mode** — pin partition offsets to fixed addresses and define custom numeric partition types
@@ -65,7 +66,7 @@ download is rejected.
 - Node.js 18+
 - Rust (stable) + target-specific build tools (VS Build Tools on Windows, Xcode CLT on macOS, `build-essential` + WebKitGTK on Linux)
 
-You do **not** need ESP-IDF installed to run the app — it only reads and writes the project's partition CSV and `sdkconfig` files.
+You do **not** need ESP-IDF installed to run the app — it only reads and writes the project's partition CSV and config files (`sdkconfig.defaults`, `platformio.ini`).
 
 ### Quick Start
 
@@ -121,7 +122,7 @@ esp-partition-toolbox/
 
 ## Troubleshooting
 
-- **Project won't load** — the folder must be an ESP-IDF project: it needs a `CMakeLists.txt` and at least one `sdkconfig.defaults` (or `sdkconfig.defaults.*`) file.
+- **Project won't load** — the folder must be an ESP32 project: an ESP-IDF project needs a `CMakeLists.txt` and at least one `sdkconfig.defaults` (or `sdkconfig.defaults.*`) file; a PlatformIO project needs `platformio.ini` with at least one `[env:…]` section.
 - **Partition file missing** — if no partition CSV exists yet, the app generates a sensible default layout in memory; it is written to disk only when you save.
 - **Validation errors block saving** — fix the blocking errors listed in the validation panel; warnings do not block a save.
 - **Build failures** — reinstall dependencies (`npm ci`), update the Rust toolchain, and ensure the platform build tools listed under Requirements are present.

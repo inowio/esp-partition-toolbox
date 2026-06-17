@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
+  ConfigTarget,
   LoadProjectResponse,
   PartitionDraftRow,
   PartitionLayoutResult,
@@ -73,6 +74,8 @@ export interface PartitionProjectState {
   projectPath: string;
   sdkconfigFile: string;
   sdkconfigFiles: string[];
+  configTargets: ConfigTarget[];
+  configUpdatable: boolean;
   syncSdkconfig: boolean;
   partitionFilename: string;
   partitionOffset: string;
@@ -123,6 +126,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   const [projectPath, setProjectPath] = useState("");
   const [sdkconfigFile, setSdkconfigFile] = useState("");
   const [sdkconfigFiles, setSdkconfigFiles] = useState<string[]>([]);
+  const [configTargets, setConfigTargets] = useState<ConfigTarget[]>([]);
+  const [configUpdatable, setConfigUpdatable] = useState(false);
   const [syncSdkconfig, setSyncSdkconfigState] = useState(false);
   const [partitionFilename, setPartitionFilename] = useState("partitions.csv");
   const [partitionOffset, setPartitionOffset] = useState("0x8000");
@@ -253,7 +258,7 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
   }
 
   async function copyPartitionInfo(): Promise<void> {
-    await copyToClipboard(partitionInfoText, "sdkconfig entries copied to clipboard.");
+    await copyToClipboard(partitionInfoText, "Config snippet copied to clipboard.");
   }
 
   async function copyPartitionCsv(): Promise<void> {
@@ -272,6 +277,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setProjectPath(response.projectPath);
     setSdkconfigFile(response.sdkconfigFile);
     setSdkconfigFiles(response.sdkconfigFiles);
+    setConfigTargets(response.configTargets);
+    setConfigUpdatable(response.configUpdatable);
     setPartitionFilename(response.partitionFilename);
     setPartitionOffset(response.partitionOffset);
     setComments(parsed.comments);
@@ -361,6 +368,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     setProjectPath("");
     setSdkconfigFile("");
     setSdkconfigFiles([]);
+    setConfigTargets([]);
+    setConfigUpdatable(false);
     setPartitionFilename("partitions.csv");
     setPartitionOffset("0x8000");
     setFlashSizeMb(defaultFlash);
@@ -500,6 +509,8 @@ function usePartitionProject(): PartitionProjectState & PartitionProjectActions 
     projectPath,
     sdkconfigFile,
     sdkconfigFiles,
+    configTargets,
+    configUpdatable,
     syncSdkconfig,
     partitionFilename,
     partitionOffset,

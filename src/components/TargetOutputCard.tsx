@@ -1,4 +1,4 @@
-import type { Platform } from "../types";
+import type { ConfigTarget, Platform } from "../types";
 import { PLATFORM_OPTIONS } from "../constants/platformOptions";
 import { mcuLabel, withDetectedMcu } from "../constants/mcuOptions";
 
@@ -11,7 +11,8 @@ interface TargetOutputCardProps {
   projectPath: string;
   syncSdkconfig: boolean;
   sdkconfigFile: string;
-  sdkconfigFiles: string[];
+  configTargets: ConfigTarget[];
+  configUpdatable: boolean;
   isBusy: boolean;
   onPlatformChange: (value: Platform) => void;
   onMcuChange: (value: string) => void;
@@ -20,20 +21,14 @@ interface TargetOutputCardProps {
   onSdkconfigFileChange: (value: string) => void;
 }
 
-function fileName(path: string): string {
-  const n = path.replace(/\\/g, "/").split("/").pop();
-  return n || path;
-}
-
 export default function TargetOutputCard(props: TargetOutputCardProps) {
   const {
     platform, mcu, flashSizeMb, flashOptions, partitionFilename, projectPath,
-    syncSdkconfig, sdkconfigFile, sdkconfigFiles, isBusy,
+    syncSdkconfig, sdkconfigFile, configTargets, configUpdatable, isBusy,
     onPlatformChange, onMcuChange, onFlashSizeChange, onSyncSdkconfigChange, onSdkconfigFileChange,
   } = props;
 
   const mcuOptions = withDetectedMcu(mcu);
-  const isEspIdf = platform === "esp-idf";
   const selectClass = "rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-sky-500 dark:border-slate-700";
 
   return (
@@ -83,19 +78,19 @@ export default function TargetOutputCard(props: TargetOutputCardProps) {
             {syncSdkconfig ? "sync on" : "sync off"}
           </span>
 
-          {isEspIdf ? (
+          {configUpdatable ? (
             <>
               <select value={sdkconfigFile} disabled={!syncSdkconfig || isBusy}
                 onChange={(e) => onSdkconfigFileChange(e.currentTarget.value)}
-                title="Select a config target file"
+                title="Select a config target"
                 className="min-w-36 max-w-56 rounded border border-slate-300 bg-transparent px-1.5 py-1 text-xs outline-none disabled:opacity-60 dark:border-slate-700">
-                {sdkconfigFiles.map((f) => <option key={f} value={f}>{fileName(f)}</option>)}
+                {configTargets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
               {!syncSdkconfig && <span className="text-[10px] text-amber-600 dark:text-amber-300">manual config update required</span>}
             </>
           ) : (
             <span className="text-[10px] text-amber-600 dark:text-amber-300">
-              {platform === "platformio" ? "PlatformIO" : "Arduino"} config writing is available in a later update — the partition CSV is still exported.
+              Config writing is available in a later update — the partition CSV is still exported.
             </span>
           )}
         </div>

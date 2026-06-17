@@ -331,7 +331,7 @@ fn select_sdkconfig_defaults_file(sdkconfig_files: &[PathBuf]) -> Result<PathBuf
     Ok(parent.join("sdkconfig.defaults"))
 }
 
-fn parse_flash_size_string(value: &str) -> Option<u32> {
+pub(crate) fn parse_flash_size_string(value: &str) -> Option<u32> {
     let trimmed = value.trim().to_ascii_uppercase();
     let stripped = trimmed.strip_suffix("MB").unwrap_or(trimmed.as_str()).trim();
     stripped.parse::<u32>().ok().filter(|&v| v > 0)
@@ -1361,11 +1361,12 @@ mod tests {
         let dir = unique_temp_dir("force_pio");
         write_file(&dir, "CMakeLists.txt", "project(demo)\n");
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
-        // Forcing platformio on an ESP-IDF folder must return the explicit
-        // "not available yet" error, not silently fall back to ESP-IDF.
+        // Forcing platformio on a folder with NO platformio.ini must fail at
+        // read_context ("Failed to read platformio.ini"), not silently fall back.
+        // Intent: forcing an impossible platform always errors cleanly.
         let result = load_project(dir.to_string_lossy().to_string(), 4, Some("platformio".to_string()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("PlatformIO"));
+        assert!(result.unwrap_err().contains("platformio.ini"));
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -1377,6 +1378,28 @@ mod tests {
         write_file(&dir, "sdkconfig.defaults", "CONFIG_IDF_TARGET=\"esp32\"\n");
         let response = load_project(dir.to_string_lossy().to_string(), 4, None).expect("load");
         assert_eq!(response.platform, "esp-idf");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_project_updates_platformio_ini_when_requested() {
+        let dir = unique_temp_dir("pio_save");
+        write_file(&dir, "platformio.ini", "[env:esp32s3]\nplatform = espressif32\nboard = esp32-s3-devkitc-1\n");
+
+        let request = SaveProjectRequest {
+            platform: "platformio".to_string(),
+            project_path: dir.to_string_lossy().to_string(),
+            partition_filename: "partitions.csv".to_string(),
+            partition_content: "nvs, data, nvs, 0x9000, 16K,\n".to_string(),
+            partition_offset: "0x8000".to_string(),
+            apply_config_update: true,
+            config_targets: vec!["env:esp32s3".to_string()],
+        };
+        let response = save_project(request).expect("save");
+        assert!(response.sdkconfig_updated);
+        assert!(fs::read_to_string(dir.join("partitions.csv")).unwrap().contains("nvs, data, nvs"));
+        let ini = fs::read_to_string(dir.join("platformio.ini")).unwrap();
+        assert!(ini.contains("board_build.partitions = partitions.csv"));
         fs::remove_dir_all(&dir).ok();
     }
 }

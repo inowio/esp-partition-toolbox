@@ -35,7 +35,8 @@ function App() {
     platform,
     mcu,
     sdkconfigFile,
-    sdkconfigFiles,
+    configTargets,
+    configUpdatable,
     syncSdkconfig,
     partitionFilename,
     partitionOffset,
@@ -153,7 +154,8 @@ function App() {
           projectPath={projectPath}
           syncSdkconfig={syncSdkconfig}
           sdkconfigFile={sdkconfigFile}
-          sdkconfigFiles={sdkconfigFiles}
+          configTargets={configTargets}
+          configUpdatable={configUpdatable}
           isBusy={isBusy}
           onPlatformChange={(p) => {
             if (projectPath) {

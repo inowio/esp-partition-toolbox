@@ -6,10 +6,11 @@ interface HelpModalProps {
   onClose: () => void;
 }
 
-type TabId = "start" | "types" | "encryption" | "concepts";
+type TabId = "start" | "platforms" | "types" | "encryption" | "concepts";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "start", label: "Getting Started" },
+  { id: "platforms", label: "Platforms" },
   { id: "types", label: "Partition Types" },
   { id: "encryption", label: "Flags & Encryption" },
   { id: "concepts", label: "Key Concepts" },
@@ -17,8 +18,8 @@ const TABS: { id: TabId; label: string }[] = [
 
 const STEPS: { title: string; body: string }[] = [
   {
-    title: "1. Load your ESP-IDF project",
-    body: "Click Load Project and pick the project folder — the one containing CMakeLists.txt and an sdkconfig.defaults file. The tool reads your existing partition CSV (or generates a sensible default) and pre-fills the partition table offset and flash size from sdkconfig.",
+    title: "1. Load your project",
+    body: "Click Load Project and pick your project folder. The tool auto-detects the platform — ESP-IDF (CMakeLists.txt + sdkconfig), PlatformIO (platformio.ini), or Arduino (a sketch folder) — reads any existing partition table, and pre-fills the flash size and (for ESP-IDF) the partition table offset.",
   },
   {
     title: "2. Set the flash size",
@@ -37,8 +38,8 @@ const STEPS: { title: string; body: string }[] = [
     body: "The Validation card flags overlaps, misaligned or out-of-range offsets (including the Partition Start value), partitions past the flash boundary, duplicate names, illegal flag combinations, and other ESP-IDF partition rules. Clear every error before flashing the device.",
   },
   {
-    title: "6. Save or copy the result",
-    body: "Save / Export writes the partition CSV back to your project and keeps the sdkconfig partition entries in sync. You can also copy the CSV from Partition Preview, or the sdkconfig lines from Entry for sdkconfig, and paste them in manually.",
+    title: "6. Save or export",
+    body: "Save / Export always writes the partition CSV. Turn on Config sync to also update the platform config — sdkconfig.defaults for ESP-IDF, board_build.partitions in platformio.ini for PlatformIO. You can also copy the CSV or the config snippet and paste it manually.",
   },
 ];
 
@@ -155,6 +156,42 @@ function ReferenceList({ items }: { items: Reference[] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function PlatformsTab() {
+  return (
+    <div className="space-y-5 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+      <p>
+        The partition CSV format is identical across ESP32 build systems. The toolbox
+        auto-detects your platform when you load a project and writes the right files for it.
+      </p>
+      <div>
+        <SubHeading>ESP-IDF</SubHeading>
+        <p className="mt-1">
+          Detected from <Code>CMakeLists.txt</Code> + <Code>sdkconfig</Code>/<Code>sdkconfig.defaults</Code>.
+          MCU and flash size are read from <Code>CONFIG_IDF_TARGET</Code> and{" "}
+          <Code>CONFIG_ESPTOOLPY_FLASHSIZE</Code>. Config sync writes the{" "}
+          <Code>CONFIG_PARTITION_TABLE_*</Code> keys into the selected sdkconfig.defaults file.
+        </p>
+      </div>
+      <div>
+        <SubHeading>PlatformIO</SubHeading>
+        <p className="mt-1">
+          Detected from <Code>platformio.ini</Code>. Pick which <Code>[env:…]</Code> to update;
+          Config sync writes <Code>board_build.partitions</Code> into that environment. MCU and
+          flash size are read from the board / <Code>board_upload.flash_size</Code> when present.
+        </p>
+      </div>
+      <div>
+        <SubHeading>Arduino</SubHeading>
+        <p className="mt-1">
+          Arduino sketch folders are detected, but full Arduino support is not available yet.
+          When it arrives, Save / Export will write <Code>partitions.csv</Code> into the sketch
+          folder and you'll select Tools → Partition Scheme → "Custom" in the Arduino IDE.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -353,7 +390,7 @@ export default function HelpModal({ open, onClose }: HelpModalProps) {
           <div>
             <h2 className="text-lg font-semibold">Help & Reference</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Build ESP-IDF partition tables with confidence
+              Build ESP32 partition tables with confidence
             </p>
           </div>
           <button
@@ -388,6 +425,7 @@ export default function HelpModal({ open, onClose }: HelpModalProps) {
 
         <div role="tabpanel" className="flex-1 overflow-y-auto px-5 py-4">
           {activeTab === "start" && <GettingStartedTab />}
+          {activeTab === "platforms" && <PlatformsTab />}
           {activeTab === "types" && <PartitionTypesTab />}
           {activeTab === "encryption" && <EncryptionTab />}
           {activeTab === "concepts" && <KeyConceptsTab />}

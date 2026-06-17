@@ -431,4 +431,30 @@ describe("usePartitionProject", () => {
       expect.objectContaining({ title: "Select Arduino project folder" }),
     );
   });
+
+  it("adopts configTargets and configUpdatable from the load response", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+
+    expect(result.current.configTargets).toEqual([]);
+    expect(result.current.configUpdatable).toBe(false);
+
+    await loadProjectIntoHook(result);
+
+    expect(result.current.configTargets).toEqual([
+      { id: "C:/dev/esp-project/sdkconfig.defaults", label: "sdkconfig.defaults" },
+    ]);
+    expect(result.current.configUpdatable).toBe(true);
+  });
+
+  it("resets configTargets and configUpdatable on project close", async () => {
+    const { result } = renderHook(() => usePartitionProject());
+    await loadProjectIntoHook(result);
+
+    expect(result.current.configUpdatable).toBe(true);
+
+    act(() => result.current.closeProject());
+
+    expect(result.current.configTargets).toEqual([]);
+    expect(result.current.configUpdatable).toBe(false);
+  });
 });
